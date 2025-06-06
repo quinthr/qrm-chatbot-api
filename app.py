@@ -51,8 +51,9 @@ def application(environ, start_response):
             # Test database connection
             try:
                 from src.database import db_manager
+                from sqlalchemy import text
                 with db_manager.get_session() as session:
-                    session.execute("SELECT 1")
+                    session.execute(text("SELECT 1"))
                 db_status = "connected"
             except Exception as e:
                 db_status = f"error: {str(e)}"
