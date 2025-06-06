@@ -111,12 +111,26 @@ def application(environ, start_response):
                         start_response(status, headers)
                         return response
                 
-                # Generate response
-                result = chat_service.generate_response(
-                    message=data['message'],
-                    site_name=data['site_name'],
-                    conversation_id=data.get('conversation_id')
-                )
+                # Generate response (with detailed error handling)
+                try:
+                    result = chat_service.generate_response(
+                        message=data['message'],
+                        site_name=data['site_name'],
+                        conversation_id=data.get('conversation_id')
+                    )
+                except Exception as service_error:
+                    # Return more detailed error info
+                    import traceback
+                    error_details = {
+                        "error": "Chat service internal error",
+                        "error_type": type(service_error).__name__,
+                        "error_message": str(service_error),
+                        "traceback": traceback.format_exc()[-500:]  # Last 500 chars of traceback
+                    }
+                    
+                    status, headers, response = json_response(error_details, '500 Internal Server Error')
+                    start_response(status, headers)
+                    return response
                 
                 status, headers, response = json_response(result)
                 start_response(status, headers)
