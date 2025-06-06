@@ -3,7 +3,7 @@ import uuid
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
 from openai import OpenAI
-from tenacity import retry, stop_after_attempt, wait_exponential
+# from tenacity import retry, stop_after_attempt, wait_exponential  # Disabled for debugging
 
 from .db_models import Product, Category, Site, ShippingZone, ShippingMethod
 from .database import db_manager
