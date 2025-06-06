@@ -14,7 +14,8 @@ class DatabaseManager:
     def __init__(self):
         # SQL Database
         self.engine = create_engine(config.database.url)
-        Base.metadata.create_all(self.engine)
+        # Don't create tables - they should already exist from the crawler
+        # Base.metadata.create_all(self.engine)
         self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
         
         # ChromaDB for vector search
