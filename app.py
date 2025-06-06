@@ -218,15 +218,19 @@ def application(environ, start_response):
                 
                 # Check actual database schema
                 with db_manager.get_session() as session:
-                    result = session.execute(text("DESCRIBE categories")).fetchall()
-                    category_columns = [row[0] for row in result]
+                    cat_result = session.execute(text("DESCRIBE categories")).fetchall()
+                    category_columns = [row[0] for row in cat_result]
+                    
+                    zone_result = session.execute(text("DESCRIBE shipping_zones")).fetchall()
+                    shipping_zone_columns = [row[0] for row in zone_result]
                 
                 debug_info = {
                     "database_url": config.database.url[:50] + "..." if len(config.database.url) > 50 else config.database.url,
                     "database_url_type": "mysql" if "mysql" in config.database.url else "sqlite",
                     "openai_key_configured": bool(config.openai.api_key and config.openai.api_key != ""),
                     "openai_key_length": len(config.openai.api_key) if config.openai.api_key else 0,
-                    "actual_category_columns": category_columns
+                    "actual_category_columns": category_columns,
+                    "actual_shipping_zone_columns": shipping_zone_columns
                 }
                 
                 status, headers, response = json_response(debug_info)
