@@ -83,7 +83,7 @@ async def chat_endpoint(request: ChatRequest):
     try:
         # Validate site
         with db_manager.get_session() as session:
-            from models import Site
+            from src.db_models import Site
             site = session.query(Site).filter_by(name=request.site_name).first()
             if not site:
                 raise HTTPException(
@@ -139,7 +139,7 @@ async def search_products(request: ProductSearchRequest):
 async def list_sites(db: Session = Depends(get_db)):
     """List available sites"""
     try:
-        from models import Site
+        from src.db_models import Site
         sites = db.query(Site).all()
         return [
             {
@@ -161,7 +161,7 @@ async def list_sites(db: Session = Depends(get_db)):
 async def get_site_stats(site_name: str, db: Session = Depends(get_db)):
     """Get statistics for a specific site"""
     try:
-        from models import Site, Product, Category
+        from src.db_models import Site, Product, Category
         
         site = db.query(Site).filter_by(name=site_name).first()
         if not site:

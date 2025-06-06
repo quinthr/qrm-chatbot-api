@@ -5,13 +5,9 @@ from sqlalchemy.orm import Session
 from openai import OpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-import sys
-import os
-sys.path.append(os.path.join(os.path.dirname(__file__), "../../crawler/src"))
-
-from models import Product, Category, Site, ShippingZone, ShippingMethod
-from database import db_manager
-from config import config
+from .db_models import Product, Category, Site, ShippingZone, ShippingMethod
+from .database import db_manager
+from .config import config
 
 
 class KnowledgeBaseService:

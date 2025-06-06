@@ -6,11 +6,8 @@ from contextlib import contextmanager
 import chromadb
 from chromadb.utils import embedding_functions
 
-# Add crawler path for imports
-sys.path.append(os.path.join(os.path.dirname(__file__), "../../crawler/src"))
-
-from models import Base, Product, Category, Site, ShippingZone, ShippingMethod
-from config import config
+from .db_models import Base, Product, Category, Site, ShippingZone, ShippingMethod
+from .config import config
 
 
 class DatabaseManager:
