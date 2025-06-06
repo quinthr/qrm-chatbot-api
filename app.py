@@ -209,6 +209,36 @@ def application(environ, start_response):
                 start_response(status, headers)
                 return response
         
+        # Test product search endpoint
+        elif path == '/test-search' and method == 'POST':
+            try:
+                data = get_request_body(environ)
+                query = data.get('query', 'soundproofing')
+                site_name = data.get('site_name', 'store1')
+                
+                from src.services import knowledge_base_service
+                
+                # Test the search directly
+                products = knowledge_base_service.search_products(site_name, query, limit=5)
+                
+                debug_info = {
+                    "query": query,
+                    "site_name": site_name,
+                    "products_found": len(products),
+                    "products": products
+                }
+                
+                status, headers, response = json_response(debug_info)
+                start_response(status, headers)
+                return response
+            except Exception as e:
+                status, headers, response = json_response(
+                    {"error": "Search test error", "message": str(e)}, 
+                    '500 Internal Server Error'
+                )
+                start_response(status, headers)
+                return response
+        
         # Debug endpoint
         elif path == '/debug' and method == 'GET':
             try:
