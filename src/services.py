@@ -129,7 +129,7 @@ class ChatService:
         self.knowledge_base = KnowledgeBaseService()
         self.openai_client = OpenAI(api_key=config.openai.api_key)
         
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
+    # @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))  # Temporarily disabled for debugging
     def generate_response(self, message: str, site_name: str, conversation_id: Optional[str] = None) -> Dict[str, Any]:
         """Generate chatbot response using OpenAI and knowledge base"""
         
