@@ -107,12 +107,10 @@ class Category(Base):
     site_id = Column(Integer, ForeignKey('sites.id'), nullable=False)
     woo_id = Column(Integer, nullable=False)
     name = Column(String(255), nullable=False)
-    slug = Column(String(255), nullable=False)
-    parent = Column(Integer, default=0)
+    slug = Column(String(255))
     description = Column(Text)
-    count = Column(Integer, default=0)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    parent_id = Column(Integer, nullable=True)
+    # Note: No count, created_at, updated_at columns in actual database
     
     # Relationships
     site = relationship('Site', back_populates='categories')
