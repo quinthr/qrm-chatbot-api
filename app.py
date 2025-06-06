@@ -55,6 +55,11 @@ def application(environ, start_response):
                 with db_manager.get_session() as session:
                     session.execute(text("SELECT 1"))
                 db_status = "connected"
+                
+                # Also test if we can query sites
+                from src.db_models import Site
+                site_count = session.query(Site).count()
+                db_status = f"connected ({site_count} sites)"
             except Exception as e:
                 db_status = f"error: {str(e)}"
             
@@ -89,32 +94,48 @@ def application(environ, start_response):
                 start_response(status, headers)
                 return response
             
-            # Import and use chat service
-            from src.services import chat_service
-            from src.database import db_manager
-            from src.db_models import Site
-            
-            # Validate site
-            with db_manager.get_session() as session:
-                site = session.query(Site).filter_by(name=data['site_name']).first()
-                if not site:
-                    status, headers, response = json_response(
-                        {"error": f"Site '{data['site_name']}' not found"}, 
-                        '404 Not Found'
-                    )
-                    start_response(status, headers)
-                    return response
-            
-            # Generate response
-            result = chat_service.generate_response(
-                message=data['message'],
-                site_name=data['site_name'],
-                conversation_id=data.get('conversation_id')
-            )
-            
-            status, headers, response = json_response(result)
-            start_response(status, headers)
-            return response
+            try:
+                # Import and use chat service
+                from src.services import chat_service
+                from src.database import db_manager
+                from src.db_models import Site
+                
+                # Validate site
+                with db_manager.get_session() as session:
+                    site = session.query(Site).filter_by(name=data['site_name']).first()
+                    if not site:
+                        status, headers, response = json_response(
+                            {"error": f"Site '{data['site_name']}' not found"}, 
+                            '404 Not Found'
+                        )
+                        start_response(status, headers)
+                        return response
+                
+                # Generate response
+                result = chat_service.generate_response(
+                    message=data['message'],
+                    site_name=data['site_name'],
+                    conversation_id=data.get('conversation_id')
+                )
+                
+                status, headers, response = json_response(result)
+                start_response(status, headers)
+                return response
+                
+            except Exception as chat_error:
+                status, headers, response = json_response(
+                    {
+                        "error": "Chat service error", 
+                        "message": str(chat_error),
+                        "debug_info": {
+                            "site_name": data.get('site_name'),
+                            "message_length": len(data.get('message', ''))
+                        }
+                    }, 
+                    '500 Internal Server Error'
+                )
+                start_response(status, headers)
+                return response
         
         # Product search endpoint
         elif path == '/search/products' and method == 'POST':
