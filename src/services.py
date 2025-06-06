@@ -3,7 +3,7 @@ import uuid
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
 from openai import OpenAI
-# from tenacity import retry, stop_after_attempt, wait_exponential  # Disabled for debugging
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 from .db_models import Product, Category, Site, ShippingZone, ShippingMethod
 from .database import db_manager
@@ -129,7 +129,7 @@ class ChatService:
         self.knowledge_base = KnowledgeBaseService()
         self.openai_client = OpenAI(api_key=config.openai.api_key)
         
-    # @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))  # Temporarily disabled for debugging
+    @retry(stop=stop_after_attempt(2), wait=wait_exponential(multiplier=1, min=2, max=5))
     def generate_response(self, message: str, site_name: str, conversation_id: Optional[str] = None) -> Dict[str, Any]:
         """Generate chatbot response using OpenAI and knowledge base"""
         

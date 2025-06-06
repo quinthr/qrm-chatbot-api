@@ -38,26 +38,79 @@ class DatabaseManager:
         return None
     
     def search_products(self, site_name: str, query: str, limit: int = 10):
-        """Fallback product search using SQL LIKE instead of vector similarity"""
+        """Enhanced product search using SQL with multiple search strategies"""
         try:
             with self.get_session() as session:
                 site = session.query(Site).filter_by(name=site_name).first()
                 if not site:
                     return {"ids": [[]], "documents": [[]], "metadatas": [[]], "distances": [[]]}
                 
-                # Simple text search on product names and descriptions
+                # Split query into words for better matching
+                query_words = query.lower().split()
+                
+                # Build comprehensive search conditions
+                search_conditions = []
+                
+                for word in query_words:
+                    word_pattern = f"%{word}%"
+                    search_conditions.extend([
+                        Product.name.ilike(word_pattern),
+                        Product.description.ilike(word_pattern),
+                        Product.short_description.ilike(word_pattern),
+                        Product.sku.ilike(word_pattern),
+                        Product.shipping_class.ilike(word_pattern)
+                    ])
+                
+                # Also search full query
+                full_query_pattern = f"%{query}%"
+                search_conditions.extend([
+                    Product.name.ilike(full_query_pattern),
+                    Product.description.ilike(full_query_pattern),
+                    Product.short_description.ilike(full_query_pattern)
+                ])
+                
+                # Combine all conditions with OR
+                from sqlalchemy import or_
+                combined_condition = or_(*search_conditions)
+                
+                # Execute search with relevance scoring (approximate)
                 products = session.query(Product).filter(
                     Product.site_id == site.id,
-                    (Product.name.ilike(f"%{query}%") | 
-                     Product.description.ilike(f"%{query}%") |
-                     Product.short_description.ilike(f"%{query}%"))
-                ).limit(limit).all()
+                    combined_condition
+                ).limit(limit * 2).all()  # Get more results for ranking
+                
+                # Simple relevance scoring based on where matches occur
+                scored_products = []
+                for product in products:
+                    score = 0
+                    text_fields = [
+                        (product.name or '', 3),  # Name matches are most important
+                        (product.short_description or '', 2),
+                        (product.description or '', 1),
+                        (product.sku or '', 2)
+                    ]
+                    
+                    for text, weight in text_fields:
+                        text_lower = text.lower()
+                        # Exact phrase match
+                        if query.lower() in text_lower:
+                            score += weight * 10
+                        # Individual word matches
+                        for word in query_words:
+                            if word in text_lower:
+                                score += weight
+                    
+                    scored_products.append((product, score))
+                
+                # Sort by score and limit results
+                scored_products.sort(key=lambda x: x[1], reverse=True)
+                final_products = [p[0] for p in scored_products[:limit]]
                 
                 # Format results to match ChromaDB structure
-                ids = [[str(p.woo_id) for p in products]]
-                documents = [[p.name for p in products]]
-                metadatas = [[{"product_id": p.woo_id} for p in products]]
-                distances = [[0.5 for _ in products]]  # Dummy distances
+                ids = [[str(p.woo_id) for p in final_products]]
+                documents = [[p.name for p in final_products]]
+                metadatas = [[{"product_id": p.woo_id} for p in final_products]]
+                distances = [[0.1 + (i * 0.1) for i in range(len(final_products))]]  # Simulated relevance scores
                 
                 return {"ids": ids, "documents": documents, "metadatas": metadatas, "distances": distances}
         except Exception as e:
