@@ -137,8 +137,9 @@ class ChatService:
         if not conversation_id:
             conversation_id = str(uuid.uuid4())
         
-        # Search for relevant products
-        relevant_products = self.knowledge_base.search_products(site_name, message, limit=5)
+        # Extract search terms from message for better product matching
+        search_query = self._extract_search_terms(message)
+        relevant_products = self.knowledge_base.search_products(site_name, search_query, limit=5)
         
         # Get additional context
         with db_manager.get_session() as session:
@@ -174,6 +175,35 @@ class ChatService:
             "shipping_options": shipping_options[:3],  # Return top 3 shipping options
             "conversation_id": conversation_id
         }
+    
+    def _extract_search_terms(self, message: str) -> str:
+        """Extract relevant search terms from user message"""
+        message_lower = message.lower()
+        
+        # Common product-related terms
+        product_keywords = [
+            'mass loaded vinyl', 'mlv', 'soundproofing', 'acoustic', 'barrier',
+            'insulation', 'foam', 'vinyl', 'noise', 'sound', 'pipe', 'lagging',
+            'fence', 'wall', 'ceiling', 'underlay', 'carpet', 'foil', '4zero',
+            'nuwrap', 'tecsound', 'nuwave'
+        ]
+        
+        # Extract relevant keywords from the message
+        found_keywords = []
+        for keyword in product_keywords:
+            if keyword in message_lower:
+                found_keywords.append(keyword)
+        
+        # If we found specific keywords, use them
+        if found_keywords:
+            return ' '.join(found_keywords)
+        
+        # Otherwise, use the original message but remove common question words
+        question_words = ['what', 'how', 'much', 'price', 'cost', 'is', 'the', 'of', 'for', 'do', 'you', 'have', 'can', 'i', 'get', 'need', 'want']
+        words = message_lower.split()
+        filtered_words = [word for word in words if word not in question_words and len(word) > 2]
+        
+        return ' '.join(filtered_words) if filtered_words else 'soundproofing'
     
     def _get_system_prompt(self, site_name: str) -> str:
         """Get system prompt for the chatbot"""
