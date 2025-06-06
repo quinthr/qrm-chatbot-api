@@ -107,9 +107,10 @@ class Category(Base):
     site_id = Column(Integer, ForeignKey('sites.id'), nullable=False)
     woo_id = Column(Integer, nullable=False)
     name = Column(String(255), nullable=False)
-    slug = Column(String(255))
+    slug = Column(String(255), nullable=False)
+    parent = Column(Integer, default=0)
     description = Column(Text)
-    parent_id = Column(Integer, nullable=True)
+    count = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -118,7 +119,7 @@ class Category(Base):
     products = relationship('Product', secondary=product_categories, back_populates='categories')
     
     # Add unique constraint for site_id + woo_id
-    __table_args__ = (UniqueConstraint('site_id', 'woo_id', name='_site_category_woo_id_uc'),)
+    __table_args__ = (UniqueConstraint('site_id', 'woo_id', name='unique_site_category'),)
 
 
 class ShippingZone(Base):
@@ -128,7 +129,7 @@ class ShippingZone(Base):
     site_id = Column(Integer, ForeignKey('sites.id'), nullable=False)
     woo_id = Column(Integer, nullable=False)
     name = Column(String(255), nullable=False)
-    order = Column(Integer)
+    order_zone = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -137,17 +138,18 @@ class ShippingZone(Base):
     methods = relationship('ShippingMethod', back_populates='zone', cascade='all, delete-orphan')
     
     # Add unique constraint for site_id + woo_id
-    __table_args__ = (UniqueConstraint('site_id', 'woo_id', name='_site_zone_woo_id_uc'),)
+    __table_args__ = (UniqueConstraint('site_id', 'woo_id', name='unique_site_zone'),)
 
 
 class ShippingMethod(Base):
     __tablename__ = 'shipping_methods'
     
     id = Column(Integer, primary_key=True)
+    site_id = Column(Integer, ForeignKey('sites.id'), nullable=False)
     zone_id = Column(Integer, ForeignKey('shipping_zones.id'), nullable=False)
     instance_id = Column(Integer, nullable=False)
     title = Column(String(255), nullable=False)
-    order = Column(Integer)
+    order_method = Column(Integer, default=0)
     enabled = Column(Boolean, default=True)
     method_id = Column(String(100))
     method_title = Column(String(255))
@@ -157,6 +159,7 @@ class ShippingMethod(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
+    site = relationship('Site')
     zone = relationship('ShippingZone', back_populates='methods')
 
 
