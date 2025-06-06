@@ -213,12 +213,20 @@ def application(environ, start_response):
         elif path == '/debug' and method == 'GET':
             try:
                 from src.config import config
+                from src.database import db_manager
+                from sqlalchemy import text
+                
+                # Check actual database schema
+                with db_manager.get_session() as session:
+                    result = session.execute(text("DESCRIBE categories")).fetchall()
+                    category_columns = [row[0] for row in result]
                 
                 debug_info = {
                     "database_url": config.database.url[:50] + "..." if len(config.database.url) > 50 else config.database.url,
                     "database_url_type": "mysql" if "mysql" in config.database.url else "sqlite",
                     "openai_key_configured": bool(config.openai.api_key and config.openai.api_key != ""),
-                    "openai_key_length": len(config.openai.api_key) if config.openai.api_key else 0
+                    "openai_key_length": len(config.openai.api_key) if config.openai.api_key else 0,
+                    "actual_category_columns": category_columns
                 }
                 
                 status, headers, response = json_response(debug_info)
