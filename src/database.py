@@ -3,8 +3,6 @@ import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 from contextlib import contextmanager
-import chromadb
-from chromadb.utils import embedding_functions
 
 from .db_models import Base, Product, Category, Site, ShippingZone, ShippingMethod
 from .config import config
@@ -18,16 +16,9 @@ class DatabaseManager:
         # Base.metadata.create_all(self.engine)
         self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
         
-        # ChromaDB for vector search
-        self.chroma_client = chromadb.PersistentClient(
-            path=config.database.chroma_persist_directory
-        )
-        
-        # OpenAI embeddings
-        self.embedding_function = embedding_functions.OpenAIEmbeddingFunction(
-            api_key=config.openai.api_key,
-            model_name="text-embedding-ada-002"
-        )
+        # ChromaDB disabled for hosting compatibility
+        self.chroma_client = None
+        self.embedding_function = None
     
     @contextmanager
     def get_session(self):
@@ -39,31 +30,36 @@ class DatabaseManager:
             session.close()
     
     def get_products_collection(self, site_name: str):
-        """Get ChromaDB collection for products"""
-        collection_name = f"products_{site_name}"
-        return self.chroma_client.get_collection(
-            name=collection_name,
-            embedding_function=self.embedding_function
-        )
+        """ChromaDB disabled - return None"""
+        return None
     
     def get_pages_collection(self, site_name: str):
-        """Get ChromaDB collection for pages"""
-        collection_name = f"pages_{site_name}"
-        return self.chroma_client.get_collection(
-            name=collection_name,
-            embedding_function=self.embedding_function
-        )
+        """ChromaDB disabled - return None"""
+        return None
     
     def search_products(self, site_name: str, query: str, limit: int = 10):
-        """Search products using vector similarity"""
+        """Fallback product search using SQL LIKE instead of vector similarity"""
         try:
-            collection = self.get_products_collection(site_name)
-            results = collection.query(
-                query_texts=[query],
-                n_results=limit,
-                include=["documents", "metadatas", "distances"]
-            )
-            return results
+            with self.get_session() as session:
+                site = session.query(Site).filter_by(name=site_name).first()
+                if not site:
+                    return {"ids": [[]], "documents": [[]], "metadatas": [[]], "distances": [[]]}
+                
+                # Simple text search on product names and descriptions
+                products = session.query(Product).filter(
+                    Product.site_id == site.id,
+                    (Product.name.ilike(f"%{query}%") | 
+                     Product.description.ilike(f"%{query}%") |
+                     Product.short_description.ilike(f"%{query}%"))
+                ).limit(limit).all()
+                
+                # Format results to match ChromaDB structure
+                ids = [[str(p.woo_id) for p in products]]
+                documents = [[p.name for p in products]]
+                metadatas = [[{"product_id": p.woo_id} for p in products]]
+                distances = [[0.5 for _ in products]]  # Dummy distances
+                
+                return {"ids": ids, "documents": documents, "metadatas": metadatas, "distances": distances}
         except Exception as e:
             print(f"Error searching products: {e}")
             return {"ids": [[]], "documents": [[]], "metadatas": [[]], "distances": [[]]}

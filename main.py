@@ -56,12 +56,8 @@ async def health_check():
     except Exception:
         db_connected = False
     
-    # Test ChromaDB connection
-    try:
-        collections = db_manager.chroma_client.list_collections()
-        vector_db_connected = True
-    except Exception:
-        vector_db_connected = False
+    # ChromaDB disabled for hosting compatibility
+    vector_db_connected = False
     
     # Check OpenAI configuration
     openai_configured = bool(config.openai.api_key and config.openai.api_key != "")
