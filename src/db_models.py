@@ -91,6 +91,7 @@ class ProductVariation(Base):
     dimensions_width = Column(String(50))
     dimensions_height = Column(String(50))
     attributes = Column(Text)  # JSON string
+    # Note: No created_at, updated_at in actual database
     
     # Relationships
     site = relationship('Site')
@@ -127,9 +128,8 @@ class ShippingZone(Base):
     site_id = Column(Integer, ForeignKey('sites.id'), nullable=False)
     woo_id = Column(Integer, nullable=False)
     name = Column(String(255), nullable=False)
-    order_zone = Column(Integer, default=0)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    order = Column(Integer)
+    # Note: No created_at, updated_at in actual database
     
     # Relationships
     site = relationship('Site', back_populates='shipping_zones')
@@ -147,14 +147,11 @@ class ShippingMethod(Base):
     zone_id = Column(Integer, ForeignKey('shipping_zones.id'), nullable=False)
     instance_id = Column(Integer, nullable=False)
     title = Column(String(255), nullable=False)
-    order_method = Column(Integer, default=0)
-    enabled = Column(Boolean, default=True)
     method_id = Column(String(100))
     method_title = Column(String(255))
-    method_description = Column(Text)
+    enabled = Column(Boolean, default=True)
     settings = Column(Text)  # JSON string
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    # Note: No order_method, method_description, created_at, updated_at in actual database
     
     # Relationships
     site = relationship('Site')
@@ -170,9 +167,7 @@ class ShippingClass(Base):
     name = Column(String(255), nullable=False)
     slug = Column(String(255))
     description = Column(Text)
-    count = Column(Integer, default=0)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    # Note: No count, created_at, updated_at in actual database
     
     # Relationships
     site = relationship('Site', back_populates='shipping_classes')
@@ -186,14 +181,13 @@ class CrawlLog(Base):
     
     id = Column(Integer, primary_key=True)
     site_id = Column(Integer, ForeignKey('sites.id'), nullable=False)
-    crawl_type = Column(String(50), nullable=False)
-    status = Column(String(50), nullable=False)
-    items_crawled = Column(Integer, default=0)
-    items_created = Column(Integer, default=0)
-    items_updated = Column(Integer, default=0)
-    errors = Column(Text)
     started_at = Column(DateTime, nullable=False)
     completed_at = Column(DateTime)
+    status = Column(String(50))
+    products_crawled = Column(Integer, default=0)
+    categories_crawled = Column(Integer, default=0)
+    errors = Column(Text)
+    # Note: No crawl_type, items_created, items_updated in actual database
     
     # Relationships
     site = relationship('Site', back_populates='crawl_logs')
