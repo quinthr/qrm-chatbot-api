@@ -168,24 +168,55 @@ def application(environ, start_response):
         
         # Sites list endpoint
         elif path == '/sites' and method == 'GET':
-            from src.database import db_manager
-            from src.db_models import Site
-            
-            with db_manager.get_session() as session:
-                sites = session.query(Site).all()
-                result = [
-                    {
-                        "name": site.name,
-                        "url": site.url,
-                        "is_active": site.is_active,
-                        "created_at": site.created_at.isoformat() if site.created_at else None
-                    }
-                    for site in sites
-                ]
-            
-            status, headers, response = json_response(result)
-            start_response(status, headers)
-            return response
+            try:
+                from src.database import db_manager
+                from src.db_models import Site
+                
+                with db_manager.get_session() as session:
+                    sites = session.query(Site).all()
+                    result = [
+                        {
+                            "name": site.name,
+                            "url": site.url,
+                            "is_active": site.is_active,
+                            "created_at": site.created_at.isoformat() if site.created_at else None
+                        }
+                        for site in sites
+                    ]
+                
+                status, headers, response = json_response(result)
+                start_response(status, headers)
+                return response
+            except Exception as e:
+                status, headers, response = json_response(
+                    {"error": "Database error", "message": str(e)}, 
+                    '500 Internal Server Error'
+                )
+                start_response(status, headers)
+                return response
+        
+        # Debug endpoint
+        elif path == '/debug' and method == 'GET':
+            try:
+                from src.config import config
+                
+                debug_info = {
+                    "database_url": config.database.url[:50] + "..." if len(config.database.url) > 50 else config.database.url,
+                    "database_url_type": "mysql" if "mysql" in config.database.url else "sqlite",
+                    "openai_key_configured": bool(config.openai.api_key and config.openai.api_key != ""),
+                    "openai_key_length": len(config.openai.api_key) if config.openai.api_key else 0
+                }
+                
+                status, headers, response = json_response(debug_info)
+                start_response(status, headers)
+                return response
+            except Exception as e:
+                status, headers, response = json_response(
+                    {"error": "Config error", "message": str(e)}, 
+                    '500 Internal Server Error'
+                )
+                start_response(status, headers)
+                return response
         
         # Default 404
         else:
