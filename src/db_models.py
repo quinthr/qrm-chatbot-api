@@ -108,12 +108,8 @@ class Category(Base):
     woo_id = Column(Integer, nullable=False)
     name = Column(String(255), nullable=False)
     slug = Column(String(255))
-    parent = Column(Integer)
     description = Column(Text)
-    display = Column(String(50), default='default')
-    image = Column(Text)  # JSON string
-    menu_order = Column(Integer, default=0)
-    count = Column(Integer, default=0)
+    parent_id = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
