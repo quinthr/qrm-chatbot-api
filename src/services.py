@@ -114,18 +114,29 @@ class KnowledgeBaseService:
             methods = session.query(ShippingMethod).filter_by(zone_id=zone.id).all()
             for method in methods:
                 settings = json.loads(method.settings) if method.settings else {}
-                cost_str = str(settings.get("cost", "0"))
+                
+                # Extract cost from WooCommerce settings structure
+                cost_value = "0"
+                if isinstance(settings.get("cost"), dict):
+                    # Handle WooCommerce settings object format
+                    cost_value = settings["cost"].get("value", "0")
+                elif "cost" in settings:
+                    # Handle direct cost value
+                    cost_value = str(settings["cost"])
                 
                 # Parse and calculate actual cost
-                calculated_cost = self._calculate_shipping_cost(cost_str, cart_total)
+                calculated_cost = self._calculate_shipping_cost(cost_value, cart_total)
+                
+                # Determine cost type
+                cost_type = "percentage" if ("%" in cost_value or "percent" in cost_value) else "fixed"
                 
                 shipping_options.append({
                     "method_id": method.method_id,
                     "title": method.title,
                     "cost": calculated_cost,
-                    "cost_type": "percentage" if "%" in cost_str else "fixed",
-                    "raw_cost": cost_str,  # Keep original for reference
-                    "description": settings.get("title", method.method_title)
+                    "cost_type": cost_type,
+                    "raw_cost": cost_value,  # Keep original for reference
+                    "description": settings.get("title", {}).get("value", method.method_title) if isinstance(settings.get("title"), dict) else settings.get("title", method.method_title)
                 })
         
         return shipping_options
@@ -135,10 +146,34 @@ class KnowledgeBaseService:
         if not cost_str or cost_str == "0":
             return "$0.00"
         
-        # Check if it's a percentage
+        # Handle WooCommerce fee format: [fee percent="14" min_fee="30" max_fee="75"]
+        if cost_str.startswith("[fee ") and cost_str.endswith("]"):
+            # Parse the fee string
+            import re
+            percent_match = re.search(r'percent="([^"]+)"', cost_str)
+            min_fee_match = re.search(r'min_fee="([^"]+)"', cost_str)
+            max_fee_match = re.search(r'max_fee="([^"]+)"', cost_str)
+            
+            if percent_match:
+                percentage = float(percent_match.group(1))
+                min_fee = float(min_fee_match.group(1)) if min_fee_match else 0
+                max_fee = float(max_fee_match.group(1)) if max_fee_match else float('inf')
+                
+                if cart_total is None:
+                    return f"${min_fee:.2f} - ${max_fee:.2f}" if max_fee != float('inf') else f"From ${min_fee:.2f}"
+                
+                # Calculate percentage-based fee
+                calculated = (cart_total * percentage) / 100
+                # Apply min/max constraints
+                calculated = max(calculated, min_fee)
+                if max_fee != float('inf'):
+                    calculated = min(calculated, max_fee)
+                
+                return f"${calculated:.2f}"
+        
+        # Check if it's a simple percentage
         if "%" in cost_str:
             if cart_total is None:
-                # If no cart total provided, indicate calculation needed
                 return "Calculated at checkout"
             
             # Extract percentage value
