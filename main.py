@@ -91,7 +91,8 @@ async def chat_endpoint(request: ChatRequest):
         result = chat_service.generate_response(
             message=request.message,
             site_name=request.site_name,
-            conversation_id=request.conversation_id
+            conversation_id=request.conversation_id,
+            user_id=request.user_id
         )
         
         return ChatResponse(**result)

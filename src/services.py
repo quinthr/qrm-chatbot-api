@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from openai import OpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-from .db_models import Product, Category, Site, ShippingZone, ShippingMethod
+from .db_models import Product, Category, Site, ShippingZone, ShippingMethod, Conversation, ConversationMessage
 from .database import db_manager
 from .config import config
 
@@ -196,43 +196,97 @@ class ChatService:
         self.openai_client = OpenAI(api_key=config.openai.api_key)
         
     @retry(stop=stop_after_attempt(2), wait=wait_exponential(multiplier=1, min=2, max=5))
-    def generate_response(self, message: str, site_name: str, conversation_id: Optional[str] = None) -> Dict[str, Any]:
+    def generate_response(self, message: str, site_name: str, conversation_id: Optional[str] = None, user_id: Optional[str] = None) -> Dict[str, Any]:
         """Generate chatbot response using OpenAI and knowledge base"""
         
         # Generate conversation ID if not provided
         if not conversation_id:
             conversation_id = str(uuid.uuid4())
         
-        # Extract search terms from message for better product matching
-        search_query = self._extract_search_terms(message)
-        relevant_products = self.knowledge_base.search_products(site_name, search_query, limit=5)
-        
-        # Get additional context
         with db_manager.get_session() as session:
+            # Get site
+            site = session.query(Site).filter_by(name=site_name).first()
+            if not site:
+                raise ValueError(f"Site '{site_name}' not found")
+            
+            # Get or create conversation
+            conversation = session.query(Conversation).filter_by(conversation_id=conversation_id).first()
+            if not conversation:
+                conversation = Conversation(
+                    site_id=site.id,
+                    conversation_id=conversation_id,
+                    user_id=user_id
+                )
+                session.add(conversation)
+                session.flush()  # Get the ID
+            
+            # Get conversation history (last 10 messages)
+            conversation_history = session.query(ConversationMessage)\
+                .filter_by(conversation_id=conversation_id)\
+                .order_by(ConversationMessage.created_at)\
+                .limit(10)\
+                .all()
+            
+            # Store user message
+            user_message = ConversationMessage(
+                conversation_id=conversation_id,
+                role="user",
+                content=message
+            )
+            session.add(user_message)
+            
+            # Extract search terms from message for better product matching
+            search_query = self._extract_search_terms(message)
+            relevant_products = self.knowledge_base.search_products(site_name, search_query, limit=5)
+            
+            # Get additional context
             categories = self.knowledge_base.get_categories(site_name, session)
             shipping_options = self.knowledge_base.get_shipping_options(site_name, session)
-        
-        # Build context for OpenAI
-        context = self._build_context(message, relevant_products, categories, shipping_options, site_name)
-        
-        # Generate response with OpenAI
-        try:
-            response = self.openai_client.chat.completions.create(
-                model=config.openai.model,
-                messages=[
-                    {"role": "system", "content": self._get_system_prompt(site_name)},
-                    {"role": "user", "content": f"Context: {context}\n\nCustomer question: {message}"}
-                ],
-                temperature=config.openai.temperature,
-                max_tokens=config.openai.max_tokens
-            )
             
-            ai_response = response.choices[0].message.content
+            # Build context for OpenAI
+            context = self._build_context(message, relevant_products, categories, shipping_options, site_name)
             
-        except Exception as e:
-            print(f"OpenAI API error: {e}")
-            ai_response = "I'm sorry, I'm having trouble processing your request right now. Please try again later."
-            relevant_products = []
+            # Build conversation messages for OpenAI
+            openai_messages = [{"role": "system", "content": self._get_system_prompt(site_name)}]
+            
+            # Add conversation history
+            for hist_msg in conversation_history:
+                openai_messages.append({
+                    "role": hist_msg.role,
+                    "content": hist_msg.content
+                })
+            
+            # Add current message with context
+            openai_messages.append({
+                "role": "user",
+                "content": f"Context: {context}\n\nCustomer question: {message}"
+            })
+            
+            # Generate response with OpenAI
+            try:
+                response = self.openai_client.chat.completions.create(
+                    model=config.openai.model,
+                    messages=openai_messages,
+                    temperature=config.openai.temperature,
+                    max_tokens=config.openai.max_tokens
+                )
+                
+                ai_response = response.choices[0].message.content
+                
+                # Store assistant response
+                assistant_message = ConversationMessage(
+                    conversation_id=conversation_id,
+                    role="assistant",
+                    content=ai_response
+                )
+                session.add(assistant_message)
+                session.commit()
+                
+            except Exception as e:
+                print(f"OpenAI API error: {e}")
+                ai_response = "I'm sorry, I'm having trouble processing your request right now. Please try again later."
+                relevant_products = []
+                session.rollback()
         
         return {
             "response": ai_response,

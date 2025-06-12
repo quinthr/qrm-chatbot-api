@@ -191,3 +191,31 @@ class CrawlLog(Base):
     
     # Relationships
     site = relationship('Site', back_populates='crawl_logs')
+
+
+class Conversation(Base):
+    __tablename__ = 'conversations'
+    
+    id = Column(Integer, primary_key=True)
+    site_id = Column(Integer, ForeignKey('sites.id'), nullable=False)
+    conversation_id = Column(String(255), nullable=False, unique=True)
+    user_id = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    site = relationship('Site')
+    messages = relationship('ConversationMessage', back_populates='conversation', cascade='all, delete-orphan')
+
+
+class ConversationMessage(Base):
+    __tablename__ = 'conversation_messages'
+    
+    id = Column(Integer, primary_key=True)
+    conversation_id = Column(String(255), ForeignKey('conversations.conversation_id'), nullable=False)
+    role = Column(String(20), nullable=False)  # 'user' or 'assistant'
+    content = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    conversation = relationship('Conversation', back_populates='messages')
