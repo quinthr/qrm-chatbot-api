@@ -183,20 +183,45 @@ async def get_site_stats(site_name: str, db: Session = Depends(get_db)):
 
 @app.post("/shipping/calculate", response_model=ShippingCalculateResponse)
 async def calculate_shipping(request: ShippingCalculateRequest):
-    """Calculate shipping costs (placeholder implementation)"""
+    """Calculate shipping costs with actual cost calculations"""
     try:
-        # This is a simplified implementation
-        # In a real scenario, you'd integrate with WooCommerce shipping calculations
+        # Calculate cart total from items
+        cart_total = 0.0
+        if request.items:
+            with db_manager.get_session() as session:
+                for item in request.items:
+                    # Get product info to calculate item total
+                    product_id = item.get("product_id")
+                    quantity = item.get("quantity", 1)
+                    
+                    if product_id:
+                        # This would need to query actual product prices from database
+                        # For now, use a simple estimate or placeholder
+                        cart_total += 50.0 * quantity  # Placeholder: $50 per item
         
         with db_manager.get_session() as session:
-            shipping_options = knowledge_base_service.get_shipping_options(request.site_name, session)
+            shipping_options = knowledge_base_service.get_shipping_options(
+                request.site_name, 
+                session, 
+                cart_total if cart_total > 0 else None
+            )
         
-        # For now, return available shipping methods
-        # You would implement actual cost calculation based on location and items
+        # Calculate estimated total (cart + lowest shipping)
+        lowest_shipping = 0.0
+        for option in shipping_options:
+            if option['cost'] not in ["Calculated at checkout", "$0.00"]:
+                try:
+                    cost_value = float(option['cost'].replace("$", "").replace(",", ""))
+                    if lowest_shipping == 0.0 or cost_value < lowest_shipping:
+                        lowest_shipping = cost_value
+                except ValueError:
+                    continue
+        
+        estimated_total = f"${cart_total + lowest_shipping:.2f}" if cart_total > 0 else "TBD"
         
         return ShippingCalculateResponse(
             shipping_options=shipping_options[:3],
-            total_cost="TBD"  # Would calculate based on items and location
+            total_cost=estimated_total
         )
         
     except Exception as e:

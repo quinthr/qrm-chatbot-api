@@ -101,8 +101,8 @@ class KnowledgeBaseService:
             for cat in categories
         ]
     
-    def get_shipping_options(self, site_name: str, session: Session) -> List[Dict]:
-        """Get shipping options for a site"""
+    def get_shipping_options(self, site_name: str, session: Session, cart_total: float = None) -> List[Dict]:
+        """Get shipping options for a site with calculated costs"""
         site = session.query(Site).filter_by(name=site_name).first()
         if not site:
             return []
@@ -114,14 +114,45 @@ class KnowledgeBaseService:
             methods = session.query(ShippingMethod).filter_by(zone_id=zone.id).all()
             for method in methods:
                 settings = json.loads(method.settings) if method.settings else {}
+                cost_str = str(settings.get("cost", "0"))
+                
+                # Parse and calculate actual cost
+                calculated_cost = self._calculate_shipping_cost(cost_str, cart_total)
+                
                 shipping_options.append({
                     "method_id": method.method_id,
                     "title": method.title,
-                    "cost": settings.get("cost", "0"),
+                    "cost": calculated_cost,
+                    "cost_type": "percentage" if "%" in cost_str else "fixed",
+                    "raw_cost": cost_str,  # Keep original for reference
                     "description": settings.get("title", method.method_title)
                 })
         
         return shipping_options
+    
+    def _calculate_shipping_cost(self, cost_str: str, cart_total: float = None) -> str:
+        """Calculate actual shipping cost from string that may contain percentage"""
+        if not cost_str or cost_str == "0":
+            return "$0.00"
+        
+        # Check if it's a percentage
+        if "%" in cost_str:
+            if cart_total is None:
+                # If no cart total provided, indicate calculation needed
+                return "Calculated at checkout"
+            
+            # Extract percentage value
+            percentage = float(cost_str.replace("%", "").strip())
+            calculated = (cart_total * percentage) / 100
+            return f"${calculated:.2f}"
+        else:
+            # Fixed cost - ensure proper formatting
+            try:
+                # Remove any currency symbols and convert to float
+                cost_value = float(cost_str.replace("$", "").replace(",", "").strip())
+                return f"${cost_value:.2f}"
+            except ValueError:
+                return cost_str  # Return as-is if can't parse
 
 
 class ChatService:
@@ -228,11 +259,24 @@ Guidelines:
 - Keep responses concise but helpful
 - Focus on solving the customer's problem
 
+Important limitations:
+- You CANNOT place orders, process payments, or complete transactions
+- You CANNOT access customer accounts or order history
+- Direct customers to the website to complete their purchase
+- Never offer to "place an order" or "help with checkout"
+
+When discussing shipping:
+- Always provide specific dollar amounts when available
+- If shipping cost shows "Calculated at checkout", explain it will be calculated based on their order total
+- Never mention percentages - always translate to dollar amounts or explain the calculation
+- Be clear about what affects shipping costs (location, order size, etc.)
+
 When recommending products:
 - Explain why the product fits their needs
 - Mention key features and benefits
 - Include pricing information
-- Suggest related or complementary products when appropriate"""
+- Suggest related or complementary products when appropriate
+- Direct them to add items to their cart on the website"""
     
     def _build_context(self, message: str, products: List[Dict], categories: List[Dict], 
                       shipping_options: List[Dict], site_name: str) -> str:
@@ -261,7 +305,10 @@ When recommending products:
         if shipping_options:
             context_parts.append("\nSHIPPING OPTIONS:")
             for option in shipping_options[:3]:
-                context_parts.append(f"- {option['title']}: {option['cost']}")
+                cost_display = option['cost']
+                if option.get('cost_type') == 'percentage' and option['cost'] == "Calculated at checkout":
+                    cost_display = f"{option['cost']} (percentage-based on cart total)"
+                context_parts.append(f"- {option['title']}: {cost_display}")
         
         return "\n".join(context_parts)
 
