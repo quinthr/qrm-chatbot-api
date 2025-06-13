@@ -130,13 +130,20 @@ class KnowledgeBaseService:
                 # Determine cost type
                 cost_type = "percentage" if ("%" in cost_value or "percent" in cost_value) else "fixed"
                 
+                # Get shipping label (prefer title setting over method title)
+                shipping_label = method.title
+                if isinstance(settings.get("title"), dict):
+                    shipping_label = settings["title"].get("value", method.title)
+                elif "title" in settings and settings["title"]:
+                    shipping_label = settings["title"]
+                
                 shipping_options.append({
                     "method_id": method.method_id,
-                    "title": method.title,
+                    "title": shipping_label,
                     "cost": calculated_cost,
                     "cost_type": cost_type,
                     "raw_cost": cost_value,  # Keep original for reference
-                    "description": settings.get("title", {}).get("value", method.method_title) if isinstance(settings.get("title"), dict) else settings.get("title", method.method_title)
+                    "description": shipping_label
                 })
         
         return shipping_options
