@@ -177,6 +177,24 @@ class ShippingClass(Base):
     __table_args__ = (UniqueConstraint('site_id', 'woo_id', name='_site_class_woo_id_uc'),)
 
 
+class ShippingClassRate(Base):
+    __tablename__ = 'shipping_class_rates'
+    
+    id = Column(Integer, primary_key=True)
+    site_id = Column(Integer, ForeignKey('sites.id'), nullable=False)
+    method_id = Column(Integer, ForeignKey('shipping_methods.id'), nullable=False)
+    shipping_class_id = Column(Integer, ForeignKey('shipping_classes.id'), nullable=True)
+    cost = Column(String(50))
+    calculation_type = Column(String(20))
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    site = relationship('Site')
+    method = relationship('ShippingMethod')
+    shipping_class = relationship('ShippingClass')
+
+
 class CrawlLog(Base):
     __tablename__ = 'crawl_logs'
     

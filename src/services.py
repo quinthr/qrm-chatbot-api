@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from openai import OpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-from .db_models import Product, Category, Site, ShippingZone, ShippingMethod, Conversation, ConversationMessage, ProductVariation
+from .db_models import Product, Category, Site, ShippingZone, ShippingMethod, Conversation, ConversationMessage, ProductVariation, ShippingClass, ShippingClassRate
 from .database import db_manager
 from .config import config
 
@@ -184,6 +184,70 @@ class KnowledgeBaseService:
             }
             for cat in categories
         ]
+    
+    def get_shipping_options_for_products(self, site_name: str, session: Session, products: List[Dict], cart_total: float = None, customer_postcode: str = None) -> List[Dict]:
+        """Get shipping options with product-specific shipping class rates"""
+        shipping_options = self.get_shipping_options(site_name, session, cart_total, customer_postcode)
+        
+        # If no products specified, return basic shipping options
+        if not products:
+            return shipping_options
+        
+        # Get shipping classes for products
+        site = session.query(Site).filter_by(name=site_name).first()
+        if not site:
+            return shipping_options
+        
+        # Collect all shipping class IDs from products
+        shipping_class_ids = set()
+        for product_data in products:
+            product_id = product_data.get('id')
+            if product_id:
+                product = session.query(Product).filter_by(
+                    site_id=site.id,
+                    woo_id=product_id
+                ).first()
+                if product and product.shipping_class:
+                    # Look up shipping class by name/slug
+                    shipping_class = session.query(ShippingClass).filter_by(
+                        site_id=site.id,
+                        slug=product.shipping_class
+                    ).first()
+                    if shipping_class:
+                        shipping_class_ids.add(shipping_class.id)
+        
+        # Update shipping costs based on shipping class rates
+        for option in shipping_options:
+            # Find the shipping method
+            method = session.query(ShippingMethod).filter_by(
+                method_id=option['method_id'],
+                title=option['title']
+            ).first()
+            
+            if method:
+                # Look for specific shipping class rates
+                if shipping_class_ids:
+                    # Get rates for these shipping classes
+                    class_rates = session.query(ShippingClassRate).filter(
+                        ShippingClassRate.method_id == method.id,
+                        ShippingClassRate.shipping_class_id.in_(shipping_class_ids)
+                    ).all()
+                    
+                    if class_rates:
+                        # Use the highest rate among all classes
+                        max_cost = 0
+                        for rate in class_rates:
+                            if rate.cost:
+                                cost = self._calculate_shipping_cost(rate.cost, cart_total)
+                                cost_value = self._extract_numeric_cost(cost)
+                                if cost_value > max_cost:
+                                    max_cost = cost_value
+                        
+                        if max_cost > 0:
+                            option['cost'] = f"${max_cost:.2f}"
+                            option['cost_type'] = 'class_based'
+        
+        return shipping_options
     
     def get_shipping_options(self, site_name: str, session: Session, cart_total: float = None, customer_postcode: str = None) -> List[Dict]:
         """Get shipping options for a site with calculated costs"""
@@ -488,6 +552,29 @@ class KnowledgeBaseService:
                 return f"${cost_value:.2f}"
             except ValueError:
                 return cost_str  # Return as-is if can't parse
+    
+    def _extract_numeric_cost(self, cost_str: str) -> float:
+        """Extract numeric value from cost string"""
+        if not cost_str or cost_str == "0":
+            return 0.0
+        
+        try:
+            # Remove currency symbols and whitespace
+            cleaned = cost_str.replace("$", "").replace(",", "").strip()
+            
+            # If it's just a number, return it
+            if cleaned.replace(".", "").isdigit():
+                return float(cleaned)
+            
+            # Extract number from strings like "From $30.00" or "$30.00 - $75.00"
+            import re
+            numbers = re.findall(r'[\d.]+', cleaned)
+            if numbers:
+                return float(numbers[0])  # Return first number found
+            
+            return 0.0
+        except (ValueError, TypeError):
+            return 0.0
 
 
 class ChatService:
@@ -544,7 +631,16 @@ class ChatService:
             
             # Extract postcode from message for location-based shipping
             customer_postcode = self._extract_postcode(message)
-            shipping_options = self.knowledge_base.get_shipping_options(site_name, session, customer_postcode=customer_postcode)
+            
+            # Use product-aware shipping calculation if products found
+            if relevant_products:
+                shipping_options = self.knowledge_base.get_shipping_options_for_products(
+                    site_name, session, relevant_products, customer_postcode=customer_postcode
+                )
+            else:
+                shipping_options = self.knowledge_base.get_shipping_options(
+                    site_name, session, customer_postcode=customer_postcode
+                )
             
             # Build context for OpenAI
             context = self._build_context(message, relevant_products, categories, shipping_options, site_name)
