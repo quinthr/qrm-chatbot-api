@@ -135,7 +135,7 @@ class KnowledgeBaseService:
         shipping_options = []
         
         for zone in zones:
-            methods = session.query(ShippingMethod).filter_by(zone_id=zone.id).all()
+            methods = session.query(ShippingMethod).filter_by(zone_id=zone.id, enabled=True).all()
             for method in methods:
                 settings = json.loads(method.settings) if method.settings else {}
                 
