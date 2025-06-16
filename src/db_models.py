@@ -129,6 +129,7 @@ class ShippingZone(Base):
     woo_id = Column(Integer, nullable=False)
     name = Column(String(255), nullable=False)
     order = Column(Integer)
+    locations = Column(Text)  # JSON string containing location data
     # Note: No created_at, updated_at in actual database
     
     # Relationships

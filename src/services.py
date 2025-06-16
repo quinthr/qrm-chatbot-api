@@ -125,7 +125,7 @@ class KnowledgeBaseService:
             for cat in categories
         ]
     
-    def get_shipping_options(self, site_name: str, session: Session, cart_total: float = None) -> List[Dict]:
+    def get_shipping_options(self, site_name: str, session: Session, cart_total: float = None, customer_postcode: str = None) -> List[Dict]:
         """Get shipping options for a site with calculated costs"""
         site = session.query(Site).filter_by(name=site_name).first()
         if not site:
@@ -133,6 +133,17 @@ class KnowledgeBaseService:
             
         zones = session.query(ShippingZone).filter_by(site_id=site.id).all()
         shipping_options = []
+        
+        # Filter zones by customer postcode if provided
+        if customer_postcode:
+            matching_zones = []
+            for zone in zones:
+                if self._postcode_matches_zone(customer_postcode, zone):
+                    matching_zones.append(zone)
+            # If no specific matches, include zones without location restrictions
+            if not matching_zones:
+                matching_zones = [zone for zone in zones if not zone.locations or zone.locations.strip() == ""]
+            zones = matching_zones
         
         for zone in zones:
             methods = session.query(ShippingMethod).filter_by(zone_id=zone.id, enabled=True).all()
@@ -169,6 +180,159 @@ class KnowledgeBaseService:
                     })
         
         return shipping_options
+    
+    def _postcode_matches_zone(self, customer_postcode: str, zone) -> bool:
+        """Check if customer postcode matches the shipping zone's location data"""
+        if not zone.locations or zone.locations.strip() == "":
+            return False
+            
+        try:
+            locations = json.loads(zone.locations)
+            for location in locations:
+                if location.get("type") == "postcode" and location.get("code") == customer_postcode:
+                    return True
+                # Match by state, city, or region
+                if location.get("type") in ["state", "city", "region"]:
+                    if self._is_postcode_in_location(customer_postcode, location):
+                        return True
+        except (json.JSONDecodeError, AttributeError):
+            return False
+            
+        return False
+    
+    def _is_postcode_in_location(self, postcode: str, location: dict) -> bool:
+        """Check if postcode belongs to a specific Australian location"""
+        code = location.get("code", "").upper()
+        location_type = location.get("type", "")
+        
+        # Australian postcode ranges by state
+        postcode_ranges = {
+            # Victoria
+            "AU:VIC": range(3000, 4000),
+            "VIC": range(3000, 4000),
+            "VICTORIA": range(3000, 4000),
+            
+            # New South Wales
+            "AU:NSW": list(range(1000, 3000)) + list(range(2000, 3000)),
+            "NSW": list(range(1000, 3000)) + list(range(2000, 3000)),
+            "NEW SOUTH WALES": list(range(1000, 3000)) + list(range(2000, 3000)),
+            
+            # Queensland
+            "AU:QLD": range(4000, 5000),
+            "QLD": range(4000, 5000),
+            "QUEENSLAND": range(4000, 5000),
+            
+            # South Australia
+            "AU:SA": range(5000, 6000),
+            "SA": range(5000, 6000),
+            "SOUTH AUSTRALIA": range(5000, 6000),
+            
+            # Western Australia
+            "AU:WA": range(6000, 7000),
+            "WA": range(6000, 7000),
+            "WESTERN AUSTRALIA": range(6000, 7000),
+            
+            # Tasmania
+            "AU:TAS": range(7000, 8000),
+            "TAS": range(7000, 8000),
+            "TASMANIA": range(7000, 8000),
+            
+            # Northern Territory
+            "AU:NT": list(range(800, 900)) + list(range(900, 1000)),
+            "NT": list(range(800, 900)) + list(range(900, 1000)),
+            "NORTHERN TERRITORY": list(range(800, 900)) + list(range(900, 1000)),
+            
+            # Australian Capital Territory
+            "AU:ACT": list(range(200, 300)) + list(range(2600, 2700)),
+            "ACT": list(range(200, 300)) + list(range(2600, 2700)),
+            "AUSTRALIAN CAPITAL TERRITORY": list(range(200, 300)) + list(range(2600, 2700)),
+        }
+        
+        # Major city postcode ranges
+        city_ranges = {
+            # Melbourne Metro
+            "MELBOURNE": range(3000, 3200),
+            "MELBOURNE METRO": range(3000, 3200),
+            "MELBOURNE CBD": range(3000, 3007),
+            "FOOTSCRAY": [3011, 3012],
+            "VIRGINIA": [4014],
+            
+            # Sydney Metro  
+            "SYDNEY": list(range(1000, 1400)) + list(range(2000, 2300)),
+            "SYDNEY METRO": list(range(1000, 1400)) + list(range(2000, 2300)),
+            "SYDNEY CBD": range(2000, 2010),
+            
+            # Brisbane Metro
+            "BRISBANE": range(4000, 4200),
+            "BRISBANE METRO": range(4000, 4200),
+            "BRISBANE CBD": range(4000, 4010),
+            "BEENLEIGH": range(4207, 4210),
+            
+            # Gold Coast
+            "GOLD COAST": range(4200, 4230),
+            "SUNSHINE COAST": range(4550, 4580),
+            
+            # Adelaide Metro
+            "ADELAIDE": range(5000, 5200),
+            "ADELAIDE METRO": range(5000, 5200),
+            
+            # Perth Metro
+            "PERTH": range(6000, 6200),
+            "PERTH METRO": range(6000, 6200),
+            
+            # Hobart Metro
+            "HOBART": range(7000, 7100),
+            "HOBART METRO": range(7000, 7100),
+            
+            # Wollongong
+            "WOLLONGONG": range(2500, 2530),
+            "WOOLLOONGONG": range(2500, 2530),  # Handle typo in your data
+        }
+        
+        try:
+            postcode_int = int(postcode)
+        except ValueError:
+            return False
+        
+        # Check state/territory ranges
+        if code in postcode_ranges:
+            postcode_range = postcode_ranges[code]
+            if isinstance(postcode_range, range):
+                return postcode_int in postcode_range
+            elif isinstance(postcode_range, list):
+                return postcode_int in postcode_range
+        
+        # Check city ranges
+        if code in city_ranges:
+            city_range = city_ranges[code]
+            if isinstance(city_range, range):
+                return postcode_int in city_range
+            elif isinstance(city_range, list):
+                return postcode_int in city_range
+        
+        # Handle radius-based matching (extract from zone name)
+        zone_name = getattr(zone, 'name', '').upper()
+        if 'RADIUS' in zone_name or 'METRO' in zone_name:
+            return self._is_in_metro_radius(postcode_int, zone_name)
+        
+        return False
+    
+    def _is_in_metro_radius(self, postcode: int, zone_name: str) -> bool:
+        """Check if postcode is within metro radius zones"""
+        metro_zones = {
+            "MELBOURNE": (3000, 3200),
+            "SYDNEY": (2000, 2300),
+            "BRISBANE": (4000, 4200),
+            "ADELAIDE": (5000, 5200),
+            "PERTH": (6000, 6200),
+            "HOBART": (7000, 7100),
+        }
+        
+        for city, (start, end) in metro_zones.items():
+            if city in zone_name and start <= postcode < end:
+                return True
+        
+        return False
     
     def _calculate_shipping_cost(self, cost_str: str, cart_total: float = None) -> str:
         """Calculate actual shipping cost from string that may contain percentage"""
@@ -270,7 +434,10 @@ class ChatService:
             
             # Get additional context
             categories = self.knowledge_base.get_categories(site_name, session)
-            shipping_options = self.knowledge_base.get_shipping_options(site_name, session)
+            
+            # Extract postcode from message for location-based shipping
+            customer_postcode = self._extract_postcode(message)
+            shipping_options = self.knowledge_base.get_shipping_options(site_name, session, customer_postcode=customer_postcode)
             
             # Build context for OpenAI
             context = self._build_context(message, relevant_products, categories, shipping_options, site_name)
@@ -353,6 +520,28 @@ class ChatService:
         filtered_words = [word for word in words if word not in question_words and len(word) > 2]
         
         return ' '.join(filtered_words) if filtered_words else 'soundproofing'
+    
+    def _extract_postcode(self, message: str) -> str:
+        """Extract Australian postcode from customer message"""
+        import re
+        
+        # Look for 4-digit Australian postcodes
+        postcode_pattern = r'\b([0-9]{4})\b'
+        matches = re.findall(postcode_pattern, message)
+        
+        for match in matches:
+            postcode = int(match)
+            # Validate it's a valid Australian postcode range
+            if ((1000 <= postcode <= 2999) or  # NSW/ACT
+                (3000 <= postcode <= 3999) or  # VIC
+                (4000 <= postcode <= 4999) or  # QLD
+                (5000 <= postcode <= 5999) or  # SA
+                (6000 <= postcode <= 6999) or  # WA
+                (7000 <= postcode <= 7999) or  # TAS
+                (800 <= postcode <= 999)):     # NT
+                return match
+        
+        return None
     
     def _get_system_prompt(self, site_name: str) -> str:
         """Get system prompt for the chatbot"""
