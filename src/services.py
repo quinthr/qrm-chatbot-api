@@ -44,7 +44,7 @@ class KnowledgeBaseService:
                         # Get all variations for this product
                         variations = session.query(ProductVariation).filter_by(
                             site_id=site.id, 
-                            product_id=product.id
+                            product_id=getattr(product, 'id', None)
                         ).all()
                         
                         # Calculate price display and ranges
@@ -71,18 +71,18 @@ class KnowledgeBaseService:
                             variation_details.append(var_data)
                         
                         products.append({
-                            "id": product.woo_id,
-                            "name": product.name,
+                            "id": getattr(product, 'woo_id', None),
+                            "name": getattr(product, 'name', ''),
                             "price": price_info["display_price"],
                             "price_range": price_info["price_range"],
-                            "regular_price": product.regular_price,
-                            "sale_price": product.sale_price,
-                            "sku": product.sku,
-                            "permalink": product.permalink,
-                            "description": product.description,
-                            "short_description": product.short_description,
-                            "stock_status": product.stock_status,
-                            "stock_quantity": product.stock_quantity,
+                            "regular_price": getattr(product, 'regular_price', None),
+                            "sale_price": getattr(product, 'sale_price', None),
+                            "sku": getattr(product, 'sku', None),
+                            "permalink": getattr(product, 'permalink', None),
+                            "description": getattr(product, 'description', None),
+                            "short_description": getattr(product, 'short_description', None),
+                            "stock_status": getattr(product, 'stock_status', 'unknown'),
+                            "stock_quantity": getattr(product, 'stock_quantity', None),
                             "has_variations": len(variations) > 0,
                             "variations": variation_details,
                             "variation_count": len(variations)
@@ -105,7 +105,7 @@ class KnowledgeBaseService:
             # Get all variations for this product
             variations = session.query(ProductVariation).filter_by(
                 site_id=site.id, 
-                product_id=product.id
+                product_id=getattr(product, 'id', None)
             ).all()
             
             # Calculate price display and ranges
@@ -132,18 +132,18 @@ class KnowledgeBaseService:
                 variation_details.append(var_data)
             
             return {
-                "id": product.woo_id,
-                "name": product.name,
+                "id": getattr(product, 'woo_id', None),
+                "name": getattr(product, 'name', ''),
                 "price": price_info["display_price"],
                 "price_range": price_info["price_range"],
-                "regular_price": product.regular_price,
-                "sale_price": product.sale_price,
-                "sku": product.sku,
-                "permalink": product.permalink,
-                "description": product.description,
-                "short_description": product.short_description,
-                "stock_status": product.stock_status,
-                "stock_quantity": product.stock_quantity,
+                "regular_price": getattr(product, 'regular_price', None),
+                "sale_price": getattr(product, 'sale_price', None),
+                "sku": getattr(product, 'sku', None),
+                "permalink": getattr(product, 'permalink', None),
+                "description": getattr(product, 'description', None),
+                "short_description": getattr(product, 'short_description', None),
+                "stock_status": getattr(product, 'stock_status', 'unknown'),
+                "stock_quantity": getattr(product, 'stock_quantity', None),
                 "has_variations": len(variations) > 0,
                 "variations": variation_details,
                 "variation_count": len(variations)
@@ -228,7 +228,7 @@ class KnowledgeBaseService:
         if not variations:
             # Simple product without variations
             return {
-                "display_price": product.price,
+                "display_price": getattr(product, 'price', 'Price on request'),
                 "price_range": None
             }
         
@@ -247,8 +247,9 @@ class KnowledgeBaseService:
         
         if not variation_prices:
             # Fallback to base product price if no valid variation prices
+            product_price = getattr(product, 'price', None)
             return {
-                "display_price": f"from {product.price}" if product.price else "Price on request",
+                "display_price": f"from {product_price}" if product_price else "Price on request",
                 "price_range": None
             }
         
