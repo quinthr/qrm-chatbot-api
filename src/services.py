@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from openai import OpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-from .db_models import Product, Category, Site, ShippingZone, ShippingMethod, Conversation, ConversationMessage
+from .db_models import Product, Category, Site, ShippingZone, ShippingMethod, Conversation, ConversationMessage, ProductVariation
 from .database import db_manager
 from .config import config
 
@@ -41,10 +41,21 @@ class KnowledgeBaseService:
                     
                     # Convert to dict format
                     for product in db_products:
+                        # Check if product has variations
+                        variations = session.query(ProductVariation).filter_by(
+                            site_id=site.id, 
+                            product_id=product.id
+                        ).all()
+                        
+                        # Format price with "from" if it has variations
+                        price_display = product.price
+                        if variations and product.price:
+                            price_display = f"from {product.price}"
+                        
                         products.append({
                             "id": product.woo_id,
                             "name": product.name,
-                            "price": product.price,
+                            "price": price_display,
                             "regular_price": product.regular_price,
                             "sale_price": product.sale_price,
                             "sku": product.sku,
@@ -52,7 +63,8 @@ class KnowledgeBaseService:
                             "description": product.description,
                             "short_description": product.short_description,
                             "stock_status": product.stock_status,
-                            "stock_quantity": product.stock_quantity
+                            "stock_quantity": product.stock_quantity,
+                            "has_variations": len(variations) > 0
                         })
         
         return products
@@ -69,10 +81,21 @@ class KnowledgeBaseService:
         ).first()
         
         if product:
+            # Check if product has variations
+            variations = session.query(ProductVariation).filter_by(
+                site_id=site.id, 
+                product_id=product.id
+            ).all()
+            
+            # Format price with "from" if it has variations
+            price_display = product.price
+            if variations and product.price:
+                price_display = f"from {product.price}"
+            
             return {
                 "id": product.woo_id,
                 "name": product.name,
-                "price": product.price,
+                "price": price_display,
                 "regular_price": product.regular_price,
                 "sale_price": product.sale_price,
                 "sku": product.sku,
@@ -80,7 +103,8 @@ class KnowledgeBaseService:
                 "description": product.description,
                 "short_description": product.short_description,
                 "stock_status": product.stock_status,
-                "stock_quantity": product.stock_quantity
+                "stock_quantity": product.stock_quantity,
+                "has_variations": len(variations) > 0
             }
         return None
     
@@ -370,11 +394,12 @@ When discussing shipping:
 When recommending products:
 - Explain why the product fits their needs
 - Mention key features and benefits
-- Include pricing information
+- Include pricing information exactly as provided (if price shows "from $X" then use "from $X")
+- For variable products, explain that multiple options/sizes are available and pricing starts from the quoted amount
 - Always provide the product page link as a clickable hyperlink
 - Format links as: <a href="URL">Click here</a> or <a href="URL">product name</a>
 - Suggest related or complementary products when appropriate
-- Direct them to visit the product page to add items to their cart"""
+- Direct them to visit the product page to see all options and add items to their cart"""
     
     def _build_context(self, message: str, products: List[Dict], categories: List[Dict], 
                       shipping_options: List[Dict], site_name: str) -> str:
