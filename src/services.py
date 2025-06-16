@@ -41,52 +41,60 @@ class KnowledgeBaseService:
                     
                     # Convert to dict format
                     for product in db_products:
-                        # Get all variations for this product
-                        variations = session.query(ProductVariation).filter_by(
-                            site_id=site.id, 
-                            product_id=getattr(product, 'id', None)
-                        ).all()
-                        
-                        # Calculate price display and ranges
-                        price_info = self._calculate_product_pricing(product, variations)
-                        
-                        # Prepare variation details
-                        variation_details = []
-                        for variation in variations:
-                            var_data = {
-                                "sku": getattr(variation, 'sku', None),
-                                "price": getattr(variation, 'price', None),
-                                "regular_price": getattr(variation, 'regular_price', None),
-                                "sale_price": getattr(variation, 'sale_price', None),
-                                "stock_status": getattr(variation, 'stock_status', None),
-                                "stock_quantity": getattr(variation, 'stock_quantity', None),
-                                "attributes": getattr(variation, 'attributes', None),
-                                "weight": getattr(variation, 'weight', None),
-                                "dimensions": {
-                                    "length": getattr(variation, 'dimensions_length', None),
-                                    "width": getattr(variation, 'dimensions_width', None),
-                                    "height": getattr(variation, 'dimensions_height', None)
-                                }
-                            }
-                            variation_details.append(var_data)
-                        
-                        products.append({
-                            "id": getattr(product, 'woo_id', None),
-                            "name": getattr(product, 'name', ''),
-                            "price": price_info["display_price"],
-                            "price_range": price_info["price_range"],
-                            "regular_price": getattr(product, 'regular_price', None),
-                            "sale_price": getattr(product, 'sale_price', None),
-                            "sku": getattr(product, 'sku', None),
-                            "permalink": getattr(product, 'permalink', None),
-                            "description": getattr(product, 'description', None),
-                            "short_description": getattr(product, 'short_description', None),
-                            "stock_status": getattr(product, 'stock_status', 'unknown'),
-                            "stock_quantity": getattr(product, 'stock_quantity', None),
-                            "has_variations": len(variations) > 0,
-                            "variations": variation_details,
-                            "variation_count": len(variations)
-                        })
+                        try:
+                            # Get all variations for this product
+                            variations = session.query(ProductVariation).filter_by(
+                                site_id=site.id, 
+                                product_id=getattr(product, 'id', None)
+                            ).all()
+                            
+                            # Calculate price display and ranges
+                            price_info = self._calculate_product_pricing(product, variations)
+                            
+                            # Prepare variation details
+                            variation_details = []
+                            for variation in variations:
+                                try:
+                                    var_data = {
+                                        "sku": getattr(variation, 'sku', None),
+                                        "price": getattr(variation, 'price', None),
+                                        "regular_price": getattr(variation, 'regular_price', None),
+                                        "sale_price": getattr(variation, 'sale_price', None),
+                                        "stock_status": getattr(variation, 'stock_status', None),
+                                        "stock_quantity": getattr(variation, 'stock_quantity', None),
+                                        "attributes": getattr(variation, 'attributes', None),
+                                        "weight": getattr(variation, 'weight', None),
+                                        "dimensions": {
+                                            "length": getattr(variation, 'dimensions_length', None),
+                                            "width": getattr(variation, 'dimensions_width', None),
+                                            "height": getattr(variation, 'dimensions_height', None)
+                                        }
+                                    }
+                                    variation_details.append(var_data)
+                                except AttributeError as e:
+                                    print(f"Error processing variation: {e}")
+                                    continue
+                            
+                            products.append({
+                                "id": getattr(product, 'woo_id', None),
+                                "name": getattr(product, 'name', ''),
+                                "price": price_info["display_price"],
+                                "price_range": price_info["price_range"],
+                                "regular_price": getattr(product, 'regular_price', None),
+                                "sale_price": getattr(product, 'sale_price', None),
+                                "sku": getattr(product, 'sku', None),
+                                "permalink": getattr(product, 'permalink', None),
+                                "description": getattr(product, 'description', None),
+                                "short_description": getattr(product, 'short_description', None),
+                                "stock_status": getattr(product, 'stock_status', 'unknown'),
+                                "stock_quantity": getattr(product, 'stock_quantity', None),
+                                "has_variations": len(variations) > 0,
+                                "variations": variation_details,
+                                "variation_count": len(variations)
+                            })
+                        except AttributeError as e:
+                            print(f"Error processing product: {e}")
+                            continue
         
         return products
     
@@ -114,22 +122,26 @@ class KnowledgeBaseService:
             # Prepare variation details
             variation_details = []
             for variation in variations:
-                var_data = {
-                    "sku": getattr(variation, 'sku', None),
-                    "price": getattr(variation, 'price', None),
-                    "regular_price": getattr(variation, 'regular_price', None),
-                    "sale_price": getattr(variation, 'sale_price', None),
-                    "stock_status": getattr(variation, 'stock_status', None),
-                    "stock_quantity": getattr(variation, 'stock_quantity', None),
-                    "attributes": getattr(variation, 'attributes', None),
-                    "weight": getattr(variation, 'weight', None),
-                    "dimensions": {
-                        "length": getattr(variation, 'dimensions_length', None),
-                        "width": getattr(variation, 'dimensions_width', None),
-                        "height": getattr(variation, 'dimensions_height', None)
+                try:
+                    var_data = {
+                        "sku": getattr(variation, 'sku', None),
+                        "price": getattr(variation, 'price', None),
+                        "regular_price": getattr(variation, 'regular_price', None),
+                        "sale_price": getattr(variation, 'sale_price', None),
+                        "stock_status": getattr(variation, 'stock_status', None),
+                        "stock_quantity": getattr(variation, 'stock_quantity', None),
+                        "attributes": getattr(variation, 'attributes', None),
+                        "weight": getattr(variation, 'weight', None),
+                        "dimensions": {
+                            "length": getattr(variation, 'dimensions_length', None),
+                            "width": getattr(variation, 'dimensions_width', None),
+                            "height": getattr(variation, 'dimensions_height', None)
+                        }
                     }
-                }
-                variation_details.append(var_data)
+                    variation_details.append(var_data)
+                except AttributeError as e:
+                    print(f"Error processing variation: {e}")
+                    continue
             
             return {
                 "id": getattr(product, 'woo_id', None),
