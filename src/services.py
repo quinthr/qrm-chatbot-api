@@ -157,14 +157,16 @@ class KnowledgeBaseService:
                 # Use the direct title from the database (contains proper names like "Free Pickup Footscray 3011")
                 shipping_label = method.title
                 
-                shipping_options.append({
-                    "method_id": method.method_id,
-                    "title": shipping_label,
-                    "cost": calculated_cost,
-                    "cost_type": cost_type,
-                    "raw_cost": cost_value,  # Keep original for reference
-                    "description": shipping_label
-                })
+                # Skip shipping options with $0.00 cost
+                if calculated_cost != "$0.00":
+                    shipping_options.append({
+                        "method_id": method.method_id,
+                        "title": shipping_label,
+                        "cost": calculated_cost,
+                        "cost_type": cost_type,
+                        "raw_cost": cost_value,  # Keep original for reference
+                        "description": shipping_label
+                    })
         
         return shipping_options
     
