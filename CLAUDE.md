@@ -84,17 +84,35 @@ Tests should be placed in the `tests/` directory. The project uses pytest. When 
 
 ## Recent Updates (January 2025)
 
-1. **Conversation History**: Added server-side storage of chat history
+1. **Shipping Class Rates Integration** (Latest - Jan 17, 2025):
+   - Added `ShippingClassRate` model for product-specific shipping costs
+   - Implemented `get_shipping_options_for_products()` method
+   - ChatService now automatically uses product-aware shipping when products are found
+   - Uses highest applicable rate when multiple shipping classes apply
+   - Added `_extract_numeric_cost()` helper for robust cost parsing
+
+2. **Product Display Enhancements**:
+   - Product URLs now clickable using HTML anchor tags (`<a href="URL">text</a>`)
+   - Variable products show "from" pricing (e.g., "from $122.59")
+   - Fixed shipping method titles to show proper names like "Free Pickup Footscray 3011"
+   - Simple variation support with price and attributes only
+
+3. **Error Handling Improvements**:
+   - Fixed AttributeError issues with safe attribute access using `getattr()`
+   - Comprehensive error handling for NULL/empty database values
+   - Robust variation processing to prevent API crashes
+
+4. **Conversation History**: Added server-side storage of chat history
    - Run migration: `python create_conversation_tables.py`
    - Stores last 10 messages per conversation_id
    - Supports user_id for multi-user tracking
 
-2. **Shipping Cost Parsing**: Fixed WooCommerce format handling
+5. **Shipping Cost Parsing**: Fixed WooCommerce format handling
    - Handles `[fee percent="X" min_fee="Y" max_fee="Z"]` format
    - Uses shipping method title from settings
    - Properly displays labels like "Free Pickup Footscray 3011"
 
-3. **Known Issues**:
+6. **Known Issues**:
    - VentraIP hosting may return 503 errors under load
    - Monitor resource usage in cPanel
    - Consider caching for performance optimization
