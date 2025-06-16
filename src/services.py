@@ -54,18 +54,18 @@ class KnowledgeBaseService:
                         variation_details = []
                         for variation in variations:
                             var_data = {
-                                "sku": variation.sku,
-                                "price": variation.price,
-                                "regular_price": variation.regular_price,
-                                "sale_price": variation.sale_price,
-                                "stock_status": variation.stock_status,
-                                "stock_quantity": variation.stock_quantity,
-                                "attributes": variation.attributes,
-                                "weight": variation.weight,
+                                "sku": getattr(variation, 'sku', None),
+                                "price": getattr(variation, 'price', None),
+                                "regular_price": getattr(variation, 'regular_price', None),
+                                "sale_price": getattr(variation, 'sale_price', None),
+                                "stock_status": getattr(variation, 'stock_status', None),
+                                "stock_quantity": getattr(variation, 'stock_quantity', None),
+                                "attributes": getattr(variation, 'attributes', None),
+                                "weight": getattr(variation, 'weight', None),
                                 "dimensions": {
-                                    "length": variation.dimensions_length,
-                                    "width": variation.dimensions_width,
-                                    "height": variation.dimensions_height
+                                    "length": getattr(variation, 'dimensions_length', None),
+                                    "width": getattr(variation, 'dimensions_width', None),
+                                    "height": getattr(variation, 'dimensions_height', None)
                                 }
                             }
                             variation_details.append(var_data)
@@ -115,18 +115,18 @@ class KnowledgeBaseService:
             variation_details = []
             for variation in variations:
                 var_data = {
-                    "sku": variation.sku,
-                    "price": variation.price,
-                    "regular_price": variation.regular_price,
-                    "sale_price": variation.sale_price,
-                    "stock_status": variation.stock_status,
-                    "stock_quantity": variation.stock_quantity,
-                    "attributes": variation.attributes,
-                    "weight": variation.weight,
+                    "sku": getattr(variation, 'sku', None),
+                    "price": getattr(variation, 'price', None),
+                    "regular_price": getattr(variation, 'regular_price', None),
+                    "sale_price": getattr(variation, 'sale_price', None),
+                    "stock_status": getattr(variation, 'stock_status', None),
+                    "stock_quantity": getattr(variation, 'stock_quantity', None),
+                    "attributes": getattr(variation, 'attributes', None),
+                    "weight": getattr(variation, 'weight', None),
                     "dimensions": {
-                        "length": variation.dimensions_length,
-                        "width": variation.dimensions_width,
-                        "height": variation.dimensions_height
+                        "length": getattr(variation, 'dimensions_length', None),
+                        "width": getattr(variation, 'dimensions_width', None),
+                        "height": getattr(variation, 'dimensions_height', None)
                     }
                 }
                 variation_details.append(var_data)
@@ -235,10 +235,11 @@ class KnowledgeBaseService:
         # Extract numeric prices from variations
         variation_prices = []
         for variation in variations:
-            if variation.price:
+            variation_price = getattr(variation, 'price', None)
+            if variation_price:
                 try:
                     # Handle both "$123.45" and "123.45" formats
-                    price_str = str(variation.price).replace("$", "").replace(",", "").strip()
+                    price_str = str(variation_price).replace("$", "").replace(",", "").strip()
                     if price_str:
                         variation_prices.append(float(price_str))
                 except (ValueError, TypeError):
