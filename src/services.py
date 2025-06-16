@@ -41,21 +41,40 @@ class KnowledgeBaseService:
                     
                     # Convert to dict format
                     for product in db_products:
-                        # Check if product has variations
+                        # Get all variations for this product
                         variations = session.query(ProductVariation).filter_by(
                             site_id=site.id, 
                             product_id=product.id
                         ).all()
                         
-                        # Format price with "from" if it has variations
-                        price_display = product.price
-                        if variations and product.price:
-                            price_display = f"from {product.price}"
+                        # Calculate price display and ranges
+                        price_info = self._calculate_product_pricing(product, variations)
+                        
+                        # Prepare variation details
+                        variation_details = []
+                        for variation in variations:
+                            var_data = {
+                                "sku": variation.sku,
+                                "price": variation.price,
+                                "regular_price": variation.regular_price,
+                                "sale_price": variation.sale_price,
+                                "stock_status": variation.stock_status,
+                                "stock_quantity": variation.stock_quantity,
+                                "attributes": variation.attributes,
+                                "weight": variation.weight,
+                                "dimensions": {
+                                    "length": variation.dimensions_length,
+                                    "width": variation.dimensions_width,
+                                    "height": variation.dimensions_height
+                                }
+                            }
+                            variation_details.append(var_data)
                         
                         products.append({
                             "id": product.woo_id,
                             "name": product.name,
-                            "price": price_display,
+                            "price": price_info["display_price"],
+                            "price_range": price_info["price_range"],
                             "regular_price": product.regular_price,
                             "sale_price": product.sale_price,
                             "sku": product.sku,
@@ -64,7 +83,9 @@ class KnowledgeBaseService:
                             "short_description": product.short_description,
                             "stock_status": product.stock_status,
                             "stock_quantity": product.stock_quantity,
-                            "has_variations": len(variations) > 0
+                            "has_variations": len(variations) > 0,
+                            "variations": variation_details,
+                            "variation_count": len(variations)
                         })
         
         return products
@@ -81,21 +102,40 @@ class KnowledgeBaseService:
         ).first()
         
         if product:
-            # Check if product has variations
+            # Get all variations for this product
             variations = session.query(ProductVariation).filter_by(
                 site_id=site.id, 
                 product_id=product.id
             ).all()
             
-            # Format price with "from" if it has variations
-            price_display = product.price
-            if variations and product.price:
-                price_display = f"from {product.price}"
+            # Calculate price display and ranges
+            price_info = self._calculate_product_pricing(product, variations)
+            
+            # Prepare variation details
+            variation_details = []
+            for variation in variations:
+                var_data = {
+                    "sku": variation.sku,
+                    "price": variation.price,
+                    "regular_price": variation.regular_price,
+                    "sale_price": variation.sale_price,
+                    "stock_status": variation.stock_status,
+                    "stock_quantity": variation.stock_quantity,
+                    "attributes": variation.attributes,
+                    "weight": variation.weight,
+                    "dimensions": {
+                        "length": variation.dimensions_length,
+                        "width": variation.dimensions_width,
+                        "height": variation.dimensions_height
+                    }
+                }
+                variation_details.append(var_data)
             
             return {
                 "id": product.woo_id,
                 "name": product.name,
-                "price": price_display,
+                "price": price_info["display_price"],
+                "price_range": price_info["price_range"],
                 "regular_price": product.regular_price,
                 "sale_price": product.sale_price,
                 "sku": product.sku,
@@ -104,7 +144,9 @@ class KnowledgeBaseService:
                 "short_description": product.short_description,
                 "stock_status": product.stock_status,
                 "stock_quantity": product.stock_quantity,
-                "has_variations": len(variations) > 0
+                "has_variations": len(variations) > 0,
+                "variations": variation_details,
+                "variation_count": len(variations)
             }
         return None
     
@@ -180,6 +222,52 @@ class KnowledgeBaseService:
                     })
         
         return shipping_options
+    
+    def _calculate_product_pricing(self, product, variations):
+        """Calculate comprehensive pricing information including variations"""
+        if not variations:
+            # Simple product without variations
+            return {
+                "display_price": product.price,
+                "price_range": None
+            }
+        
+        # Extract numeric prices from variations
+        variation_prices = []
+        for variation in variations:
+            if variation.price:
+                try:
+                    # Handle both "$123.45" and "123.45" formats
+                    price_str = str(variation.price).replace("$", "").replace(",", "").strip()
+                    if price_str:
+                        variation_prices.append(float(price_str))
+                except (ValueError, TypeError):
+                    continue
+        
+        if not variation_prices:
+            # Fallback to base product price if no valid variation prices
+            return {
+                "display_price": f"from {product.price}" if product.price else "Price on request",
+                "price_range": None
+            }
+        
+        # Calculate price range
+        min_price = min(variation_prices)
+        max_price = max(variation_prices)
+        
+        if min_price == max_price:
+            # All variations have same price
+            display_price = f"${min_price:.2f}"
+            price_range = None
+        else:
+            # Variable pricing
+            display_price = f"from ${min_price:.2f}"
+            price_range = f"${min_price:.2f} - ${max_price:.2f}"
+        
+        return {
+            "display_price": display_price,
+            "price_range": price_range
+        }
     
     def _postcode_matches_zone(self, customer_postcode: str, zone) -> bool:
         """Check if customer postcode matches the shipping zone's location data"""
@@ -582,11 +670,13 @@ When recommending products:
 - Explain why the product fits their needs
 - Mention key features and benefits
 - Include pricing information exactly as provided (if price shows "from $X" then use "from $X")
-- For variable products, explain that multiple options/sizes are available and pricing starts from the quoted amount
+- For variable products with variations, explain the different options available (sizes, weights, attributes)
+- If a price range is provided, mention both the starting price and range (e.g., "from $122.59, with options ranging $122.59 - $450.00")
+- Mention specific variation details when relevant (e.g., "Available in 2kg, 4kg, 6kg, and 8kg/m² variants")
 - Always provide the product page link as a clickable hyperlink
 - Format links as: <a href="URL">Click here</a> or <a href="URL">product name</a>
 - Suggest related or complementary products when appropriate
-- Direct them to visit the product page to see all options and add items to their cart"""
+- Direct them to visit the product page to see all variation options and add items to their cart"""
     
     def _build_context(self, message: str, products: List[Dict], categories: List[Dict], 
                       shipping_options: List[Dict], site_name: str) -> str:
@@ -597,13 +687,33 @@ When recommending products:
             context_parts.append("RELEVANT PRODUCTS:")
             for product in products:
                 price_info = f"Price: {product['price']}"
-                if product.get('sale_price'):
+                if product.get('price_range'):
+                    price_info = f"Price: {product['price']} (Range: {product['price_range']})"
+                elif product.get('sale_price'):
                     price_info = f"Regular: {product['regular_price']}, Sale: {product['sale_price']}"
+                
+                # Add variation information
+                variation_info = ""
+                if product.get('has_variations') and product.get('variations'):
+                    variation_count = product.get('variation_count', 0)
+                    variation_info = f"\n  Variations: {variation_count} options available"
+                    
+                    # Include sample variation attributes
+                    sample_variations = product['variations'][:3]  # Show first 3 variations
+                    for var in sample_variations:
+                        if var.get('attributes'):
+                            try:
+                                attributes = json.loads(var['attributes']) if isinstance(var['attributes'], str) else var['attributes']
+                                attr_str = ", ".join([f"{k}: {v}" for k, v in attributes.items() if v])
+                                if attr_str:
+                                    variation_info += f"\n    - {var['sku']}: {var['price']} ({attr_str})"
+                            except (json.JSONDecodeError, TypeError):
+                                variation_info += f"\n    - {var['sku']}: {var['price']}"
                 
                 context_parts.append(
                     f"- {product['name']} (SKU: {product.get('sku', 'N/A')}) - {price_info}\n"
                     f"  Description: {product.get('short_description', 'No description')}\n"
-                    f"  Stock: {product.get('stock_status', 'unknown')}\n"
+                    f"  Stock: {product.get('stock_status', 'unknown')}{variation_info}\n"
                     f"  Link: {product.get('permalink', 'N/A')}"
                 )
         
