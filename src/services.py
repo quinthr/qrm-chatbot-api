@@ -182,9 +182,9 @@ class KnowledgeBaseService:
             for zone in zones:
                 if self._postcode_matches_zone(customer_postcode, zone):
                     matching_zones.append(zone)
-            # If no specific matches, include zones without location restrictions
+            # If no specific matches, include ALL zones (fallback to show all options)
             if not matching_zones:
-                matching_zones = [zone for zone in zones if not zone.locations or zone.locations.strip() == ""]
+                matching_zones = zones  # Show all zones if no location-specific matches
             zones = matching_zones
         
         for zone in zones:
@@ -673,8 +673,9 @@ When recommending products:
 - For variable products with variations, explain the different options available (sizes, weights, attributes)
 - If a price range is provided, mention both the starting price and range (e.g., "from $122.59, with options ranging $122.59 - $450.00")
 - Mention specific variation details when relevant (e.g., "Available in 2kg, 4kg, 6kg, and 8kg/m² variants")
-- Always provide the product page link as a clickable hyperlink
-- Format links as: <a href="URL">Click here</a> or <a href="URL">product name</a>
+- ALWAYS provide product page links as clickable HTML hyperlinks
+- MUST format links as HTML anchor tags: <a href="URL">Click here</a> or <a href="URL">product name</a>
+- NEVER use markdown format [text](url) - always use HTML <a href="url">text</a>
 - Suggest related or complementary products when appropriate
 - Direct them to visit the product page to see all variation options and add items to their cart"""
     
