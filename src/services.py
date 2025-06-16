@@ -371,8 +371,10 @@ When recommending products:
 - Explain why the product fits their needs
 - Mention key features and benefits
 - Include pricing information
+- Always provide the product page link as a clickable hyperlink
+- Format links as: <a href="URL">Click here</a> or <a href="URL">product name</a>
 - Suggest related or complementary products when appropriate
-- Direct them to add items to their cart on the website"""
+- Direct them to visit the product page to add items to their cart"""
     
     def _build_context(self, message: str, products: List[Dict], categories: List[Dict], 
                       shipping_options: List[Dict], site_name: str) -> str:

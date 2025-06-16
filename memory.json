@@ -1,0 +1,66 @@
+{
+  "conversation_date": "2025-01-14",
+  "main_issues_addressed": {
+    "shipping_response_issue": {
+      "problem": "Shipping questions returning malformed JSON with raw WooCommerce settings",
+      "solution": "Fixed cost parsing in _calculate_shipping_cost to handle [fee percent=\"X\" min_fee=\"Y\" max_fee=\"Z\"] format",
+      "status": "✅ Fixed and deployed"
+    },
+    "conversation_context": {
+      "problem": "API doesn't remember previous messages in conversation",
+      "solution": "Added Conversation and ConversationMessage models with database storage",
+      "migration_needed": "python create_conversation_tables.py",
+      "status": "✅ Implemented, needs deployment"
+    },
+    "503_errors": {
+      "problem": "Getting 503 Service Unavailable errors on VentraIP hosting",
+      "causes": ["Entry process limits", "Memory constraints", "CPU usage limits"],
+      "suggestions": ["Check Resource Usage in cPanel", "Add caching", "Optimize Python app", "Consider plan upgrade"],
+      "status": "⚠️ Ongoing monitoring needed"
+    }
+  },
+  "api_details": {
+    "url": "https://qrm-chatbot-api.com.soundproofingproducts.com.au",
+    "test_endpoints": {
+      "chat": "curl -X POST https://qrm-chatbot-api.com.soundproofingproducts.com.au/chat -H \"Content-Type: application/json\" -d '{\"message\": \"Hello\", \"site_name\": \"store1\"}'",
+      "melbourne_shipping": "curl -X POST https://qrm-chatbot-api.com.soundproofingproducts.com.au/chat -H \"Content-Type: application/json\" -d '{\"message\": \"How much is the shipping fee to melbourne 3000?\", \"site_name\": \"store1\"}'"
+    }
+  },
+  "wordpress_plugin_updates": {
+    "user_identification": {
+      "javascript": "generateUserId() function using localStorage for guests and wp.user.id for logged-in users",
+      "purpose": "Enable per-user conversation history",
+      "implementation": "Add user_id to API requests"
+    },
+    "conversation_history": {
+      "current": "Plugin sends last 10 messages with each request",
+      "recommendation": "Can remove client-side history since API now stores it server-side"
+    }
+  },
+  "shipping_label_fix": {
+    "problem": "Showing 'Flat rate' instead of actual shipping method names",
+    "solution": "Use title from WooCommerce settings instead of method.title",
+    "example": "Now shows 'Free Pickup Footscray 3011' instead of 'Flat rate'"
+  },
+  "github_commits": [
+    {
+      "commit": "ba5f0abd",
+      "message": "Fix shipping cost parsing to handle WooCommerce settings format"
+    },
+    {
+      "commit": "c4539a0a", 
+      "message": "Add server-side conversation history storage"
+    },
+    {
+      "commit": "4bc680a8",
+      "message": "Use shipping method title from settings instead of method name"
+    }
+  ],
+  "next_steps": [
+    "Pull latest changes on production server",
+    "Run create_conversation_tables.py migration",
+    "Update WordPress plugin with user ID generation",
+    "Test conversation persistence",
+    "Monitor 503 errors and server resources"
+  ]
+}
