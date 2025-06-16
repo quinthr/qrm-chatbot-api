@@ -154,12 +154,8 @@ class KnowledgeBaseService:
                 # Determine cost type
                 cost_type = "percentage" if ("%" in cost_value or "percent" in cost_value) else "fixed"
                 
-                # Get shipping label (prefer title setting over method title)
+                # Use the direct title from the database (contains proper names like "Free Pickup Footscray 3011")
                 shipping_label = method.title
-                if isinstance(settings.get("title"), dict):
-                    shipping_label = settings["title"].get("value", method.title)
-                elif "title" in settings and settings["title"]:
-                    shipping_label = settings["title"]
                 
                 shipping_options.append({
                     "method_id": method.method_id,
