@@ -11,12 +11,29 @@ from .config import config
 class DatabaseManager:
     def __init__(self):
         # SQL Database with connection pooling settings
+        database_url = config.database.url
+        
+        # Add MySQL-specific settings if it's a MySQL database
+        connect_args = {}
+        if database_url.startswith("mysql") and "pymysql" in database_url:
+            # PyMySQL specific connection arguments
+            connect_args = {
+                'connect_timeout': 10,
+            }
+            # Ensure proper charset
+            if "charset=" not in database_url:
+                if "?" in database_url:
+                    database_url += "&charset=utf8mb4"
+                else:
+                    database_url += "?charset=utf8mb4"
+        
         self.engine = create_engine(
-            config.database.url,
+            database_url,
             pool_pre_ping=True,  # Verify connections before using them
             pool_recycle=3600,   # Recycle connections after 1 hour
-            pool_size=10,        # Number of connections to maintain in pool
-            max_overflow=20      # Maximum overflow connections
+            pool_size=5,         # Reduced pool size for shared hosting
+            max_overflow=10,     # Reduced overflow for shared hosting
+            connect_args=connect_args
         )
         # Don't create tables - they should already exist from the crawler
         # Base.metadata.create_all(self.engine)

@@ -645,7 +645,7 @@ class ChatService:
         self.knowledge_base = KnowledgeBaseService()
         self.openai_client = OpenAI(api_key=config.openai.api_key)
         
-    @retry(stop=stop_after_attempt(2), wait=wait_exponential(multiplier=1, min=2, max=5))
+    # @retry(stop=stop_after_attempt(2), wait=wait_exponential(multiplier=1, min=2, max=5))
     def generate_response(self, message: str, site_name: str, conversation_id: Optional[str] = None, user_id: Optional[str] = None) -> Dict[str, Any]:
         """Generate chatbot response using OpenAI and knowledge base"""
         
@@ -653,37 +653,46 @@ class ChatService:
         if not conversation_id:
             conversation_id = str(uuid.uuid4())
         
-        with db_manager.get_session() as session:
-            # Get site
-            site = session.query(Site).filter_by(name=site_name).first()
-            if not site:
-                raise ValueError(f"Site '{site_name}' not found")
-            
-            # Get or create conversation
-            conversation = session.query(Conversation).filter_by(conversation_id=conversation_id).first()
-            if not conversation:
-                conversation = Conversation(
-                    site_id=site.id,
+        try:
+            with db_manager.get_session() as session:
+                # Get site
+                try:
+                    site = session.query(Site).filter_by(name=site_name).first()
+                    if not site:
+                        raise ValueError(f"Site '{site_name}' not found")
+                except Exception as db_error:
+                    print(f"ERROR: Database query failed for site lookup: {str(db_error)}")
+                    raise Exception(f"Database connection error: {str(db_error)}")
+                
+                # Get or create conversation
+                try:
+                    conversation = session.query(Conversation).filter_by(conversation_id=conversation_id).first()
+                    if not conversation:
+                        conversation = Conversation(
+                            site_id=site.id,
+                            conversation_id=conversation_id,
+                            user_id=user_id
+                        )
+                        session.add(conversation)
+                        session.flush()  # Get the ID
+                except Exception as db_error:
+                    print(f"ERROR: Database query failed for conversation: {str(db_error)}")
+                    raise Exception(f"Database connection error during conversation creation: {str(db_error)}")
+                
+                # Get conversation history (last 10 messages)
+                conversation_history = session.query(ConversationMessage)\
+                    .filter_by(conversation_id=conversation_id)\
+                    .order_by(ConversationMessage.created_at)\
+                    .limit(10)\
+                    .all()
+                
+                # Store user message
+                user_message = ConversationMessage(
                     conversation_id=conversation_id,
-                    user_id=user_id
+                    role="user",
+                    content=message
                 )
-                session.add(conversation)
-                session.flush()  # Get the ID
-            
-            # Get conversation history (last 10 messages)
-            conversation_history = session.query(ConversationMessage)\
-                .filter_by(conversation_id=conversation_id)\
-                .order_by(ConversationMessage.created_at)\
-                .limit(10)\
-                .all()
-            
-            # Store user message
-            user_message = ConversationMessage(
-                conversation_id=conversation_id,
-                role="user",
-                content=message
-            )
-            session.add(user_message)
+                session.add(user_message)
             
             # Extract search terms from message for better product matching
             search_query = self._extract_search_terms(message)

@@ -45,6 +45,27 @@ async def global_exception_handler(request, exc):
     )
 
 
+@app.get("/test-db")
+async def test_database():
+    """Test database connection directly"""
+    try:
+        with db_manager.get_session() as session:
+            # Simple query to test connection
+            from src.db_models import Site
+            count = session.query(Site).count()
+            return {"status": "ok", "site_count": count}
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "error_type": type(e).__name__,
+                "error_message": str(e),
+                "traceback": traceback.format_exc() if config.api.debug else None
+            }
+        )
+
+
 @app.get("/", response_model=HealthResponse)
 async def health_check():
     """Health check endpoint"""
@@ -107,11 +128,28 @@ async def chat_endpoint(request: ChatRequest):
         error_message = str(e)
         error_type = type(e).__name__
         
-        # Check if it's a RetryError and extract the underlying error
-        if "RetryError" in error_type and hasattr(e, '__cause__'):
-            underlying_error = e.__cause__
+        # Try to extract the underlying error from RetryError
+        if "RetryError" in str(type(e)):
+            # Try multiple ways to get the underlying error
+            underlying_error = None
+            
+            # Method 1: Check __cause__
+            if hasattr(e, '__cause__') and e.__cause__:
+                underlying_error = e.__cause__
+            # Method 2: Check last_attempt
+            elif hasattr(e, 'last_attempt') and hasattr(e.last_attempt, 'exception'):
+                underlying_error = e.last_attempt.exception()
+            # Method 3: Parse from string representation
+            elif "raised" in str(e):
+                import re
+                match = re.search(r'raised (\w+)', str(e))
+                if match:
+                    error_type = match.group(1)
+                    error_message = f"{error_type}: Database connection error - check logs for details"
+            
             if underlying_error:
-                error_message = f"{type(underlying_error).__name__}: {str(underlying_error)}"
+                error_type = type(underlying_error).__name__
+                error_message = str(underlying_error)
         
         # Return detailed error information
         return JSONResponse(

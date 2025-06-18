@@ -84,10 +84,16 @@ Tests should be placed in the `tests/` directory. The project uses pytest. When 
 
 ## Recent Updates (January 2025)
 
-0. **Shipping Cost & Database Fixes** (Latest - Jan 18, 2025):
+0. **Database Connection & Error Handling Fixes** (Latest - Jan 18, 2025):
+   - Improved error extraction from RetryError to show actual database errors
+   - Temporarily disabled retry decorator to get direct error messages
+   - Added MySQL-specific connection settings with proper charset (utf8mb4)
+   - Reduced connection pool size for shared hosting compatibility (5 connections)
+   - Added /test-db endpoint for direct database connection testing
+   - Fixed PyMySQL connection arguments compatibility
+
+1. **Shipping Cost Fixes** (Jan 18, 2025):
    - Fixed shipping cost extraction from ShippingClassRate table for no-class rates
-   - Added database connection pooling to prevent OperationalError issues
-   - Improved error handling to extract underlying errors from RetryError
    - Added debug logging for shipping zone and method discovery
    - Now correctly handles fee format: [fee percent="16" min_fee="55" max_fee="120"]
 
