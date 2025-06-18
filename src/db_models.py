@@ -186,8 +186,7 @@ class ShippingClassRate(Base):
     shipping_class_id = Column(Integer, ForeignKey('shipping_classes.id'), nullable=True)
     cost = Column(String(50))
     calculation_type = Column(String(20))
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    # Note: No created_at, updated_at columns in actual database
     
     # Relationships
     site = relationship('Site')

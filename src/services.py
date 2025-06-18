@@ -771,7 +771,10 @@ class ChatService:
         
         except Exception as e:
             print(f"ERROR: Chat service error: {str(e)}")
-            ai_response = "I'm sorry, I'm having trouble processing your request right now. Please try again later."
+            print(f"ERROR: Exception type: {type(e).__name__}")
+            import traceback
+            print(f"ERROR: Traceback: {traceback.format_exc()}")
+            ai_response = f"DEBUG ERROR: {type(e).__name__}: {str(e)}"
             relevant_products = []
             categories = []
             shipping_options = []
