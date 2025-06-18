@@ -84,12 +84,15 @@ Tests should be placed in the `tests/` directory. The project uses pytest. When 
 
 ## Recent Updates (January 2025)
 
-0. **Database Connection & Error Handling Fixes** (Latest - Jan 18, 2025):
+0. **Database Debugging & Connection Fixes** (Latest - Jan 18, 2025):
    - Improved error extraction from RetryError to show actual database errors
    - Temporarily disabled retry decorator to get direct error messages
    - Added MySQL-specific connection settings with proper charset (utf8mb4)
    - Reduced connection pool size for shared hosting compatibility (5 connections)
-   - Added /test-db endpoint for direct database connection testing
+   - Added debugging endpoints:
+     - `/test-db` - Basic database connection test
+     - `/db-schema` - Complete database schema inspection with table/column details
+     - `/check-models` - Test all SQLAlchemy models for query compatibility
    - Fixed PyMySQL connection arguments compatibility
 
 1. **Shipping Cost Fixes** (Jan 18, 2025):

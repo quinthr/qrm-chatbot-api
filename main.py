@@ -66,6 +66,156 @@ async def test_database():
         )
 
 
+@app.get("/db-schema")
+async def get_database_schema():
+    """Get all tables and columns in the database for troubleshooting"""
+    try:
+        from sqlalchemy import inspect, text
+        
+        with db_manager.get_session() as session:
+            # Get the inspector
+            inspector = inspect(db_manager.engine)
+            
+            # Get all table names
+            tables = inspector.get_table_names()
+            
+            schema_info = {
+                "database_url": config.database.url.split('@')[1] if '@' in config.database.url else "hidden",
+                "tables": {}
+            }
+            
+            # For each table, get column information
+            for table_name in sorted(tables):
+                columns = []
+                try:
+                    # Get columns using inspector
+                    for col in inspector.get_columns(table_name):
+                        col_info = {
+                            "name": col['name'],
+                            "type": str(col['type']),
+                            "nullable": col.get('nullable', True),
+                            "default": str(col.get('default', '')) if col.get('default') else None,
+                            "primary_key": col.get('primary_key', False)
+                        }
+                        columns.append(col_info)
+                    
+                    # Get primary keys
+                    pk_constraint = inspector.get_pk_constraint(table_name)
+                    primary_keys = pk_constraint.get('constrained_columns', [])
+                    
+                    # Get foreign keys
+                    foreign_keys = []
+                    for fk in inspector.get_foreign_keys(table_name):
+                        foreign_keys.append({
+                            "columns": fk['constrained_columns'],
+                            "referred_table": fk['referred_table'],
+                            "referred_columns": fk['referred_columns']
+                        })
+                    
+                    # Get row count
+                    row_count = session.execute(text(f"SELECT COUNT(*) FROM {table_name}")).scalar()
+                    
+                    schema_info["tables"][table_name] = {
+                        "columns": columns,
+                        "primary_keys": primary_keys,
+                        "foreign_keys": foreign_keys,
+                        "row_count": row_count
+                    }
+                    
+                except Exception as e:
+                    schema_info["tables"][table_name] = {
+                        "error": f"Could not inspect table: {str(e)}"
+                    }
+            
+            # Also include expected tables from our models
+            from src.db_models import Base
+            expected_tables = []
+            for mapper in Base.registry.mappers:
+                expected_tables.append(mapper.class_.__tablename__)
+            
+            schema_info["expected_tables"] = sorted(list(set(expected_tables)))
+            schema_info["missing_tables"] = [t for t in expected_tables if t not in tables]
+            schema_info["extra_tables"] = [t for t in tables if t not in expected_tables]
+            
+            return schema_info
+            
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "error_type": type(e).__name__,
+                "error_message": str(e),
+                "traceback": traceback.format_exc() if config.api.debug else None
+            }
+        )
+
+
+@app.get("/check-models")
+async def check_models():
+    """Check if all models can be queried successfully"""
+    from src import db_models
+    
+    results = {}
+    
+    with db_manager.get_session() as session:
+        # List of all models to check
+        models_to_check = [
+            ("Site", db_models.Site),
+            ("Product", db_models.Product),
+            ("ProductVariation", db_models.ProductVariation),
+            ("Category", db_models.Category),
+            ("ShippingZone", db_models.ShippingZone),
+            ("ShippingMethod", db_models.ShippingMethod),
+            ("ShippingClass", db_models.ShippingClass),
+            ("ShippingClassRate", db_models.ShippingClassRate),
+            ("Conversation", db_models.Conversation),
+            ("ConversationMessage", db_models.ConversationMessage),
+            ("CrawlLog", db_models.CrawlLog)
+        ]
+        
+        for model_name, model_class in models_to_check:
+            try:
+                # Try to query the model
+                count = session.query(model_class).count()
+                
+                # Get first record if exists
+                first_record = session.query(model_class).first()
+                
+                # Get column names from the model
+                columns = [c.name for c in model_class.__table__.columns]
+                
+                results[model_name] = {
+                    "status": "ok",
+                    "table_name": model_class.__tablename__,
+                    "row_count": count,
+                    "has_data": first_record is not None,
+                    "columns": columns,
+                    "column_count": len(columns)
+                }
+                
+            except Exception as e:
+                results[model_name] = {
+                    "status": "error",
+                    "table_name": getattr(model_class, '__tablename__', 'unknown'),
+                    "error_type": type(e).__name__,
+                    "error_message": str(e)
+                }
+    
+    # Summary
+    summary = {
+        "total_models": len(models_to_check),
+        "successful": sum(1 for r in results.values() if r["status"] == "ok"),
+        "failed": sum(1 for r in results.values() if r["status"] == "error"),
+        "models_with_data": sum(1 for r in results.values() if r.get("has_data", False))
+    }
+    
+    return {
+        "summary": summary,
+        "models": results
+    }
+
+
 @app.get("/", response_model=HealthResponse)
 async def health_check():
     """Health check endpoint"""
