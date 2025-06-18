@@ -670,7 +670,10 @@ class ChatService:
                     print(f"ERROR: Database query failed for site lookup: {str(db_error)}")
                     raise Exception(f"Database connection error: {str(db_error)}")
                 
-                # Get or create conversation
+                # Get or create conversation (non-blocking)
+                conversation = None
+                conversation_history = []
+                
                 try:
                     conversation = session.query(Conversation).filter_by(conversation_id=conversation_id).first()
                     if not conversation:
@@ -681,24 +684,25 @@ class ChatService:
                         )
                         session.add(conversation)
                         session.flush()  # Get the ID
-                except Exception as db_error:
-                    print(f"ERROR: Database query failed for conversation: {str(db_error)}")
-                    raise Exception(f"Database connection error during conversation creation: {str(db_error)}")
-                
-                # Get conversation history (last 10 messages)
-                conversation_history = session.query(ConversationMessage)\
-                    .filter_by(conversation_id=conversation_id)\
-                    .order_by(ConversationMessage.created_at)\
-                    .limit(10)\
-                    .all()
-                
-                # Store user message
-                user_message = ConversationMessage(
-                    conversation_id=conversation_id,
-                    role="user",
-                    content=message
-                )
-                session.add(user_message)
+                    
+                    # Get conversation history (last 10 messages)
+                    conversation_history = session.query(ConversationMessage)\
+                        .filter_by(conversation_id=conversation_id)\
+                        .order_by(ConversationMessage.created_at)\
+                        .limit(10)\
+                        .all()
+                    
+                    # Store user message
+                    user_message = ConversationMessage(
+                        conversation_id=conversation_id,
+                        role="user",
+                        content=message
+                    )
+                    session.add(user_message)
+                    
+                except Exception as conv_error:
+                    print(f"WARNING: Conversation handling failed, proceeding without history: {str(conv_error)}")
+                    # Continue without conversation history - don't fail the whole chat
                 
                 # Extract search terms from message for better product matching
                 search_query = self._extract_search_terms(message)
@@ -754,14 +758,19 @@ class ChatService:
                     
                     ai_response = response.choices[0].message.content
                     
-                    # Store assistant response
-                    assistant_message = ConversationMessage(
-                        conversation_id=conversation_id,
-                        role="assistant",
-                        content=ai_response
-                    )
-                    session.add(assistant_message)
-                    session.commit()
+                    # Store assistant response (if conversation system is working)
+                    try:
+                        if conversation:  # Only try to save if conversation was created successfully
+                            assistant_message = ConversationMessage(
+                                conversation_id=conversation_id,
+                                role="assistant",
+                                content=ai_response
+                            )
+                            session.add(assistant_message)
+                            session.commit()
+                    except Exception as save_error:
+                        print(f"WARNING: Failed to save assistant response to conversation: {str(save_error)}")
+                        # Continue anyway - don't fail the chat because of conversation storage
                     
                 except Exception as e:
                     print(f"OpenAI API error: {e}")
