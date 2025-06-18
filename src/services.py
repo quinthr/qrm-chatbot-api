@@ -747,13 +747,14 @@ class ChatService:
                     "content": f"Context: {context}\n\nCustomer question: {message}"
                 })
                 
-                # Generate response with OpenAI
+                # Generate response with OpenAI (with timeout)
                 try:
                     response = self.openai_client.chat.completions.create(
                         model=config.openai.model,
                         messages=openai_messages,
                         temperature=config.openai.temperature,
-                        max_tokens=config.openai.max_tokens
+                        max_tokens=config.openai.max_tokens,
+                        timeout=300  # 2 minute timeout for OpenAI calls
                     )
                     
                     ai_response = response.choices[0].message.content

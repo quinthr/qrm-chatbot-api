@@ -304,23 +304,67 @@ def application(environ, start_response):
                 return response
             
             try:
-                # Import and use chat service
+                # Import and use chat service with timeout
                 from src.services import chat_service
                 from src.database import db_manager
                 from src.db_models import Site
+                from concurrent.futures import ThreadPoolExecutor, TimeoutError
                 
-                # Validate site
-                with db_manager.get_session() as session:
-                    site = session.query(Site).filter_by(name=data['site_name']).first()
-                    if not site:
-                        status, headers, response = json_response(
-                            {"error": f"Site '{data['site_name']}' not found"}, 
-                            '404 Not Found'
+                # Add timeout to prevent hanging - 5 minutes max
+                def generate_chat_response():
+                    try:
+                        # Validate site
+                        with db_manager.get_session() as session:
+                            site = session.query(Site).filter_by(name=data['site_name']).first()
+                            if not site:
+                                return {"error": f"Site '{data['site_name']}' not found", "status_code": 404}
+                        
+                        # Generate response with timeout protection
+                        result = chat_service.generate_response(
+                            message=data['message'],
+                            site_name=data['site_name'],
+                            conversation_id=data.get('conversation_id'),
+                            user_id=data.get('user_id')
                         )
+                        return result
+                    except Exception as e:
+                        return {"error": str(e), "error_type": type(e).__name__, "status_code": 500}
+                
+                # Run with timeout using thread pool
+                with ThreadPoolExecutor(max_workers=1) as executor:
+                    try:
+                        future = executor.submit(generate_chat_response)
+                        result = future.result(timeout=300)  # 5 minute timeout
+                        
+                        # Check if result contains error
+                        if isinstance(result, dict) and "error" in result:
+                            status_code = '404 Not Found' if result.get("status_code") == 404 else '500 Internal Server Error'
+                            status, headers, response = json_response(
+                                {"error": result["error"], "error_type": result.get("error_type", "Unknown")}, 
+                                status_code
+                            )
+                            start_response(status, headers)
+                            return response
+                        
+                        status, headers, response = json_response(result)
+                        start_response(status, headers)
+                        return response
+                        
+                    except TimeoutError:
+                        # Return timeout response in expected chat format
+                        timeout_response = {
+                            "response": "I'm taking longer than usual to process your request. Please try again with a simpler question.",
+                            "products": [],
+                            "categories": [], 
+                            "shipping_options": [],
+                            "conversation_id": data.get('conversation_id', 'timeout'),
+                            "error": "Request timeout"
+                        }
+                        status, headers, response = json_response(timeout_response, '408 Request Timeout')
                         start_response(status, headers)
                         return response
                 
-                # Generate response
+                # Generate response (fallback - should not reach here)
                 try:
                     result = chat_service.generate_response(
                         message=data['message'],
