@@ -704,8 +704,12 @@ class ChatService:
                 search_query = self._extract_search_terms(message)
                 relevant_products = self.knowledge_base.search_products(site_name, search_query, limit=5)
                 
-                # Get additional context
-                categories = self.knowledge_base.get_categories(site_name, session)
+                # Get additional context (skip categories if table is empty)
+                try:
+                    categories = self.knowledge_base.get_categories(site_name, session)
+                except Exception as e:
+                    print(f"DEBUG: Skipping categories due to error: {e}")
+                    categories = []
                 
                 # Extract postcode from message for location-based shipping
                 customer_postcode = self._extract_postcode(message)
