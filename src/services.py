@@ -653,6 +653,12 @@ class ChatService:
         if not conversation_id:
             conversation_id = str(uuid.uuid4())
         
+        # Initialize variables with defaults
+        ai_response = "I'm sorry, I'm having trouble processing your request right now. Please try again later."
+        relevant_products = []
+        categories = []
+        shipping_options = []
+        
         try:
             with db_manager.get_session() as session:
                 # Get site
@@ -758,6 +764,13 @@ class ChatService:
                     ai_response = "I'm sorry, I'm having trouble processing your request right now. Please try again later."
                     relevant_products = []
                     session.rollback()
+        
+        except Exception as e:
+            print(f"ERROR: Chat service error: {str(e)}")
+            ai_response = "I'm sorry, I'm having trouble processing your request right now. Please try again later."
+            relevant_products = []
+            categories = []
+            shipping_options = []
         
         return {
             "response": ai_response,
