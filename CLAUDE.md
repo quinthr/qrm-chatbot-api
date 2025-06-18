@@ -84,6 +84,14 @@ Tests should be placed in the `tests/` directory. The project uses pytest. When 
 
 ## Recent Updates (January 2025)
 
+0. **Product Variations Fix** (Latest - Jan 18, 2025):
+   - Fixed API to properly parse variation attributes from JSON string stored in database
+   - Added comprehensive variation data including SKU, prices, stock, dimensions
+   - Handles both list format (WooCommerce standard) and dict format for attributes
+   - Variations now display correctly in chat context with all attribute details
+
+## Previous Updates
+
 1. **Shipping Class Rates Integration** (Latest - Jan 17, 2025):
    - Added `ShippingClassRate` model for product-specific shipping costs
    - Implemented `get_shipping_options_for_products()` method

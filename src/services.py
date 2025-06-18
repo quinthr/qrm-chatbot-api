@@ -62,11 +62,34 @@ class KnowledgeBaseService:
                                         var_price = getattr(var, 'price', None)
                                         if var_price:
                                             var_prices.append(var_price)
-                                            # Simple variation data - just price and attributes
-                                            variations.append({
-                                                "price": var_price,
-                                                "attributes": getattr(var, 'attributes', None)
-                                            })
+                                        
+                                        # Parse attributes from JSON string
+                                        attributes_str = getattr(var, 'attributes', None)
+                                        attributes_dict = {}
+                                        if attributes_str:
+                                            try:
+                                                attributes_dict = json.loads(attributes_str)
+                                            except (json.JSONDecodeError, TypeError):
+                                                attributes_dict = {}
+                                        
+                                        # Build comprehensive variation data
+                                        variation_data = {
+                                            "id": getattr(var, 'woo_id', None),
+                                            "sku": getattr(var, 'sku', None),
+                                            "price": var_price,
+                                            "regular_price": getattr(var, 'regular_price', None),
+                                            "sale_price": getattr(var, 'sale_price', None),
+                                            "stock_quantity": getattr(var, 'stock_quantity', None),
+                                            "stock_status": getattr(var, 'stock_status', 'unknown'),
+                                            "weight": getattr(var, 'weight', None),
+                                            "dimensions": {
+                                                "length": getattr(var, 'dimensions_length', None),
+                                                "width": getattr(var, 'dimensions_width', None),
+                                                "height": getattr(var, 'dimensions_height', None)
+                                            },
+                                            "attributes": attributes_dict
+                                        }
+                                        variations.append(variation_data)
                                     
                                     # If we have variation prices, show "from" pricing
                                     if var_prices and getattr(product, 'price', None):
@@ -132,11 +155,34 @@ class KnowledgeBaseService:
                             var_price = getattr(var, 'price', None)
                             if var_price:
                                 var_prices.append(var_price)
-                                # Simple variation data - just price and attributes
-                                variations.append({
-                                    "price": var_price,
-                                    "attributes": getattr(var, 'attributes', None)
-                                })
+                            
+                            # Parse attributes from JSON string
+                            attributes_str = getattr(var, 'attributes', None)
+                            attributes_dict = {}
+                            if attributes_str:
+                                try:
+                                    attributes_dict = json.loads(attributes_str)
+                                except (json.JSONDecodeError, TypeError):
+                                    attributes_dict = {}
+                            
+                            # Build comprehensive variation data
+                            variation_data = {
+                                "id": getattr(var, 'woo_id', None),
+                                "sku": getattr(var, 'sku', None),
+                                "price": var_price,
+                                "regular_price": getattr(var, 'regular_price', None),
+                                "sale_price": getattr(var, 'sale_price', None),
+                                "stock_quantity": getattr(var, 'stock_quantity', None),
+                                "stock_status": getattr(var, 'stock_status', 'unknown'),
+                                "weight": getattr(var, 'weight', None),
+                                "dimensions": {
+                                    "length": getattr(var, 'dimensions_length', None),
+                                    "width": getattr(var, 'dimensions_width', None),
+                                    "height": getattr(var, 'dimensions_height', None)
+                                },
+                                "attributes": attributes_dict
+                            }
+                            variations.append(variation_data)
                         
                         # If we have variation prices, show "from" pricing
                         if var_prices and getattr(product, 'price', None):
@@ -819,12 +865,30 @@ When recommending products:
                     for var in sample_variations:
                         if var.get('attributes'):
                             try:
-                                attributes = json.loads(var['attributes']) if isinstance(var['attributes'], str) else var['attributes']
-                                attr_str = ", ".join([f"{k}: {v}" for k, v in attributes.items() if v])
+                                # Attributes can be a list of dicts or a dict
+                                attributes = var['attributes']
+                                attr_str = ""
+                                
+                                if isinstance(attributes, list):
+                                    # WooCommerce format: list of {name, option} objects
+                                    attr_parts = []
+                                    for attr in attributes:
+                                        if isinstance(attr, dict) and attr.get('option'):
+                                            attr_parts.append(f"{attr.get('name', 'Unknown')}: {attr['option']}")
+                                    attr_str = ", ".join(attr_parts)
+                                elif isinstance(attributes, dict):
+                                    # Alternative format: direct key-value pairs
+                                    attr_parts = []
+                                    for key, value in attributes.items():
+                                        if value:
+                                            attr_parts.append(f"{key}: {value}")
+                                    attr_str = ", ".join(attr_parts)
                                 if attr_str:
-                                    variation_info += f"\n    - {var['sku']}: {var['price']} ({attr_str})"
-                            except (json.JSONDecodeError, TypeError):
-                                variation_info += f"\n    - {var['sku']}: {var['price']}"
+                                    variation_info += f"\n    - {var.get('sku', 'N/A')}: {var.get('price', 'N/A')} ({attr_str})"
+                                else:
+                                    variation_info += f"\n    - {var.get('sku', 'N/A')}: {var.get('price', 'N/A')}"
+                            except (json.JSONDecodeError, TypeError, KeyError):
+                                variation_info += f"\n    - {var.get('sku', 'N/A')}: {var.get('price', 'N/A')}"
                 
                 context_parts.append(
                     f"- {product['name']} (SKU: {product.get('sku', 'N/A')}) - {price_info}\n"
