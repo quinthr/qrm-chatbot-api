@@ -45,6 +45,12 @@ async def global_exception_handler(request, exc):
     )
 
 
+@app.get("/ping")
+async def ping():
+    """Simple ping endpoint to test if API is working"""
+    return {"status": "ok", "message": "API is responding"}
+
+
 @app.get("/test-db")
 async def test_database():
     """Test database connection directly"""
