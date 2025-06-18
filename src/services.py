@@ -693,71 +693,71 @@ class ChatService:
                     content=message
                 )
                 session.add(user_message)
-            
-            # Extract search terms from message for better product matching
-            search_query = self._extract_search_terms(message)
-            relevant_products = self.knowledge_base.search_products(site_name, search_query, limit=5)
-            
-            # Get additional context
-            categories = self.knowledge_base.get_categories(site_name, session)
-            
-            # Extract postcode from message for location-based shipping
-            customer_postcode = self._extract_postcode(message)
-            
-            # Use product-aware shipping calculation if products found
-            if relevant_products:
-                shipping_options = self.knowledge_base.get_shipping_options_for_products(
-                    site_name, session, relevant_products, customer_postcode=customer_postcode
-                )
-            else:
-                shipping_options = self.knowledge_base.get_shipping_options(
-                    site_name, session, customer_postcode=customer_postcode
-                )
-            
-            # Build context for OpenAI
-            context = self._build_context(message, relevant_products, categories, shipping_options, site_name)
-            
-            # Build conversation messages for OpenAI
-            openai_messages = [{"role": "system", "content": self._get_system_prompt(site_name)}]
-            
-            # Add conversation history
-            for hist_msg in conversation_history:
+                
+                # Extract search terms from message for better product matching
+                search_query = self._extract_search_terms(message)
+                relevant_products = self.knowledge_base.search_products(site_name, search_query, limit=5)
+                
+                # Get additional context
+                categories = self.knowledge_base.get_categories(site_name, session)
+                
+                # Extract postcode from message for location-based shipping
+                customer_postcode = self._extract_postcode(message)
+                
+                # Use product-aware shipping calculation if products found
+                if relevant_products:
+                    shipping_options = self.knowledge_base.get_shipping_options_for_products(
+                        site_name, session, relevant_products, customer_postcode=customer_postcode
+                    )
+                else:
+                    shipping_options = self.knowledge_base.get_shipping_options(
+                        site_name, session, customer_postcode=customer_postcode
+                    )
+                
+                # Build context for OpenAI
+                context = self._build_context(message, relevant_products, categories, shipping_options, site_name)
+                
+                # Build conversation messages for OpenAI
+                openai_messages = [{"role": "system", "content": self._get_system_prompt(site_name)}]
+                
+                # Add conversation history
+                for hist_msg in conversation_history:
+                    openai_messages.append({
+                        "role": hist_msg.role,
+                        "content": hist_msg.content
+                    })
+                
+                # Add current message with context
                 openai_messages.append({
-                    "role": hist_msg.role,
-                    "content": hist_msg.content
+                    "role": "user",
+                    "content": f"Context: {context}\n\nCustomer question: {message}"
                 })
-            
-            # Add current message with context
-            openai_messages.append({
-                "role": "user",
-                "content": f"Context: {context}\n\nCustomer question: {message}"
-            })
-            
-            # Generate response with OpenAI
-            try:
-                response = self.openai_client.chat.completions.create(
-                    model=config.openai.model,
-                    messages=openai_messages,
-                    temperature=config.openai.temperature,
-                    max_tokens=config.openai.max_tokens
-                )
                 
-                ai_response = response.choices[0].message.content
-                
-                # Store assistant response
-                assistant_message = ConversationMessage(
-                    conversation_id=conversation_id,
-                    role="assistant",
-                    content=ai_response
-                )
-                session.add(assistant_message)
-                session.commit()
-                
-            except Exception as e:
-                print(f"OpenAI API error: {e}")
-                ai_response = "I'm sorry, I'm having trouble processing your request right now. Please try again later."
-                relevant_products = []
-                session.rollback()
+                # Generate response with OpenAI
+                try:
+                    response = self.openai_client.chat.completions.create(
+                        model=config.openai.model,
+                        messages=openai_messages,
+                        temperature=config.openai.temperature,
+                        max_tokens=config.openai.max_tokens
+                    )
+                    
+                    ai_response = response.choices[0].message.content
+                    
+                    # Store assistant response
+                    assistant_message = ConversationMessage(
+                        conversation_id=conversation_id,
+                        role="assistant",
+                        content=ai_response
+                    )
+                    session.add(assistant_message)
+                    session.commit()
+                    
+                except Exception as e:
+                    print(f"OpenAI API error: {e}")
+                    ai_response = "I'm sorry, I'm having trouble processing your request right now. Please try again later."
+                    relevant_products = []
+                    session.rollback()
         
         return {
             "response": ai_response,
