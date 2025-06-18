@@ -9,12 +9,12 @@ from datetime import datetime
 
 Base = declarative_base()
 
-# Association tables
-product_categories = Table(
-    'product_categories', Base.metadata,
-    Column('product_id', Integer, ForeignKey('products.id')),
-    Column('category_id', Integer, ForeignKey('categories.id'))
-)
+# Association tables - DISABLED due to empty categories table
+# product_categories = Table(
+#     'product_categories', Base.metadata,
+#     Column('product_id', Integer, ForeignKey('products.id')),
+#     Column('category_id', Integer, ForeignKey('categories.id'))
+# )
 
 
 class Site(Base):
@@ -66,7 +66,7 @@ class Product(Base):
     
     # Relationships
     site = relationship('Site', back_populates='products')
-    categories = relationship('Category', secondary=product_categories, back_populates='products')
+    # categories = relationship('Category', secondary=product_categories, back_populates='products')  # DISABLED
     variations = relationship('ProductVariation', back_populates='product', cascade='all, delete-orphan')
     
     # Add unique constraint for site_id + woo_id
@@ -115,7 +115,7 @@ class Category(Base):
     
     # Relationships
     site = relationship('Site', back_populates='categories')
-    products = relationship('Product', secondary=product_categories, back_populates='categories')
+    # products = relationship('Product', secondary=product_categories, back_populates='categories')  # DISABLED
     
     # Add unique constraint for site_id + woo_id
     __table_args__ = (UniqueConstraint('site_id', 'woo_id', name='unique_site_category'),)
