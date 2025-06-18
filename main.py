@@ -102,9 +102,26 @@ async def chat_endpoint(request: ChatRequest):
     except Exception as e:
         if config.api.debug:
             traceback.print_exc()
-        raise HTTPException(
+        
+        # Extract the actual error from RetryError
+        error_message = str(e)
+        error_type = type(e).__name__
+        
+        # Check if it's a RetryError and extract the underlying error
+        if "RetryError" in error_type and hasattr(e, '__cause__'):
+            underlying_error = e.__cause__
+            if underlying_error:
+                error_message = f"{type(underlying_error).__name__}: {str(underlying_error)}"
+        
+        # Return detailed error information
+        return JSONResponse(
             status_code=500,
-            detail=f"Error processing chat request: {str(e)}"
+            content={
+                "error": "Chat service internal error",
+                "error_type": error_type,
+                "error_message": error_message,
+                "traceback": traceback.format_exc() if config.api.debug else None
+            }
         )
 
 

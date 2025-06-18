@@ -84,7 +84,14 @@ Tests should be placed in the `tests/` directory. The project uses pytest. When 
 
 ## Recent Updates (January 2025)
 
-0. **Product Variations Fix** (Latest - Jan 18, 2025):
+0. **Shipping Cost & Database Fixes** (Latest - Jan 18, 2025):
+   - Fixed shipping cost extraction from ShippingClassRate table for no-class rates
+   - Added database connection pooling to prevent OperationalError issues
+   - Improved error handling to extract underlying errors from RetryError
+   - Added debug logging for shipping zone and method discovery
+   - Now correctly handles fee format: [fee percent="16" min_fee="55" max_fee="120"]
+
+1. **Product Variations Fix** (Jan 18, 2025):
    - Fixed API to properly parse variation attributes from JSON string stored in database
    - Added comprehensive variation data including SKU, prices, stock, dimensions
    - Handles both list format (WooCommerce standard) and dict format for attributes

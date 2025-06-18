@@ -299,9 +299,11 @@ class KnowledgeBaseService:
         """Get shipping options for a site with calculated costs"""
         site = session.query(Site).filter_by(name=site_name).first()
         if not site:
+            print(f"WARNING: Site '{site_name}' not found in database")
             return []
             
         zones = session.query(ShippingZone).filter_by(site_id=site.id).all()
+        print(f"DEBUG: Found {len(zones)} shipping zones for site {site_name}")
         shipping_options = []
         
         # Filter zones by customer postcode if provided
@@ -317,8 +319,11 @@ class KnowledgeBaseService:
         
         for zone in zones:
             methods = session.query(ShippingMethod).filter_by(zone_id=zone.id, enabled=True).all()
+            print(f"DEBUG: Zone '{zone.name}' has {len(methods)} enabled methods")
+            
             for method in methods:
                 settings = json.loads(method.settings) if method.settings else {}
+                print(f"DEBUG: Method '{method.title}' settings: {settings}")
                 
                 # Extract cost from WooCommerce settings structure
                 cost_value = "0"
@@ -328,6 +333,18 @@ class KnowledgeBaseService:
                 elif "cost" in settings:
                     # Handle direct cost value
                     cost_value = str(settings["cost"])
+                
+                # Check for no-class shipping rate (where shipping_class_id is NULL)
+                no_class_rate = session.query(ShippingClassRate).filter_by(
+                    method_id=method.id,
+                    shipping_class_id=None
+                ).first()
+                
+                if no_class_rate and no_class_rate.cost:
+                    cost_value = no_class_rate.cost
+                    print(f"DEBUG: Using no-class rate cost: {cost_value}")
+                else:
+                    print(f"DEBUG: Extracted cost value from settings: {cost_value}")
                 
                 # Parse and calculate actual cost
                 calculated_cost = self._calculate_shipping_cost(cost_value, cart_total)

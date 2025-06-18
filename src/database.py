@@ -10,8 +10,14 @@ from .config import config
 
 class DatabaseManager:
     def __init__(self):
-        # SQL Database
-        self.engine = create_engine(config.database.url)
+        # SQL Database with connection pooling settings
+        self.engine = create_engine(
+            config.database.url,
+            pool_pre_ping=True,  # Verify connections before using them
+            pool_recycle=3600,   # Recycle connections after 1 hour
+            pool_size=10,        # Number of connections to maintain in pool
+            max_overflow=20      # Maximum overflow connections
+        )
         # Don't create tables - they should already exist from the crawler
         # Base.metadata.create_all(self.engine)
         self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
