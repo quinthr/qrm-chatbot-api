@@ -1,6 +1,7 @@
 """
 Modern configuration using Pydantic Settings
 """
+import os
 from typing import List, Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field, field_validator
@@ -9,7 +10,7 @@ class Settings(BaseSettings):
     """Application settings with environment variable support"""
     
     # API Configuration
-    api_port: int = Field(default=8000, description="API port")
+    api_port: int = Field(default_factory=lambda: int(os.environ.get("PORT", "8000")), description="API port")
     debug: bool = Field(default=False, description="Debug mode")
     
     # Database

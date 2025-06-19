@@ -41,8 +41,8 @@ class Database:
             
             self.engine = create_async_engine(
                 db_url,
-                pool_size=10,
-                max_overflow=20,
+                pool_size=5,
+                max_overflow=10,
                 pool_timeout=30,
                 pool_recycle=3600,
                 pool_pre_ping=True,
@@ -55,15 +55,20 @@ class Database:
                 expire_on_commit=False
             )
             
-            # Test connection
-            async with self.engine.begin() as conn:
-                await conn.execute("SELECT 1")
+            # Test connection with timeout
+            try:
+                async with self.engine.begin() as conn:
+                    await conn.execute("SELECT 1")
+                logger.info("MySQL connection initialized successfully")
+            except Exception as conn_err:
+                logger.warning(f"MySQL connection test failed: {conn_err}")
+                # Continue without raising - allow graceful degradation
                 
-            logger.info("MySQL connection initialized successfully")
-            
         except Exception as e:
             logger.error(f"Failed to initialize MySQL: {e}")
-            raise
+            # Don't raise - allow app to start without database
+            self.engine = None
+            self.async_session = None
     
     async def _init_chromadb(self):
         """Initialize ChromaDB connection"""
@@ -95,6 +100,9 @@ class Database:
     @asynccontextmanager
     async def get_session(self):
         """Get async database session"""
+        if not self.async_session:
+            raise RuntimeError("Database not initialized")
+            
         async with self.async_session() as session:
             try:
                 yield session

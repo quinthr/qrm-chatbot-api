@@ -30,10 +30,14 @@ async def detailed_health_check(
     
     # Check MySQL
     try:
-        async with db.get_session() as session:
-            result = await session.execute(text("SELECT 1"))
-            if result.scalar() == 1:
-                health_status["services"]["mysql"] = "operational"
+        if db.async_session:
+            async with db.get_session() as session:
+                result = await session.execute(text("SELECT 1"))
+                if result.scalar() == 1:
+                    health_status["services"]["mysql"] = "operational"
+        else:
+            health_status["services"]["mysql"] = "not initialized"
+            health_status["status"] = "degraded"
     except Exception as e:
         health_status["services"]["mysql"] = f"error: {str(e)}"
         health_status["status"] = "degraded"
