@@ -360,16 +360,9 @@ class ChatService:
         except Exception as e:
             logger.warning(f"Message saving disabled due to missing tables: {e}")
         
-        # Extract search terms and search for products
-        search_terms = await self._extract_search_terms(message)
-        products = []
-        
-        if search_terms:
-            for term in search_terms[:3]:  # Limit to 3 searches
-                found_products = await self.kb_service.search_products(
-                    site_name, term, limit=5
-                )
-                products.extend(found_products)
+        # Extract search terms from message for better product matching (like old version)
+        search_query = self._extract_search_terms(message)
+        products = await self.kb_service.search_products(site_name, search_query, limit=5)
         
         # Build context
         context = await self._build_context(
@@ -485,27 +478,34 @@ class ChatService:
             session.add(message)
             await session.commit()
     
-    async def _extract_search_terms(self, message: str) -> List[str]:
-        """Extract product search terms from message"""
-        try:
-            response = await self.openai_client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "Extract product search terms from the user message. Return as JSON array of strings."
-                    },
-                    {"role": "user", "content": message}
-                ],
-                temperature=0.3,
-                max_tokens=100
-            )
-            
-            terms = json.loads(response.choices[0].message.content)
-            return terms if isinstance(terms, list) else []
-            
-        except:
-            return []
+    def _extract_search_terms(self, message: str) -> str:
+        """Extract relevant search terms from user message (same as old version)"""
+        message_lower = message.lower()
+        
+        # Common product-related terms
+        product_keywords = [
+            'mass loaded vinyl', 'mlv', 'soundproofing', 'acoustic', 'barrier',
+            'insulation', 'foam', 'vinyl', 'noise', 'sound', 'pipe', 'lagging',
+            'fence', 'wall', 'ceiling', 'underlay', 'carpet', 'foil', '4zero',
+            'nuwrap', 'tecsound', 'nuwave'
+        ]
+        
+        # Extract relevant keywords from the message
+        found_keywords = []
+        for keyword in product_keywords:
+            if keyword in message_lower:
+                found_keywords.append(keyword)
+        
+        # If we found specific keywords, use them
+        if found_keywords:
+            return ' '.join(found_keywords)
+        
+        # Otherwise, use the original message but remove common question words
+        question_words = ['what', 'how', 'much', 'price', 'cost', 'is', 'the', 'of', 'for', 'do', 'you', 'have', 'can', 'i', 'get', 'need', 'want']
+        words = message_lower.split()
+        filtered_words = [word for word in words if word not in question_words and len(word) > 2]
+        
+        return ' '.join(filtered_words) if filtered_words else 'soundproofing'
     
     async def _build_context(
         self,
@@ -546,36 +546,83 @@ class ChatService:
         history: List[Dict],
         context: str
     ) -> str:
-        """Get AI response from OpenAI"""
-        messages = [
-            {
-                "role": "system",
-                "content": (
-                    "You are a helpful customer service assistant for an online store. "
-                    "Provide accurate, friendly responses based on the product information provided. "
-                    "Use HTML <a> tags for product links."
-                )
-            }
-        ]
+        """Get AI response from OpenAI (same as old version)"""
+        from .config_modern import settings
         
-        # Add history
-        messages.extend(history[-5:])  # Last 5 messages
+        # Build conversation messages for OpenAI (same as old version)
+        openai_messages = [{"role": "system", "content": self._get_system_prompt("store1")}]
         
-        # Add context and current message
-        if context:
-            messages.append({"role": "system", "content": f"Context:\n{context}"})
+        # Add conversation history
+        for hist_msg in history[-5:]:  # Last 5 messages
+            openai_messages.append({
+                "role": hist_msg["role"],
+                "content": hist_msg["content"]
+            })
         
-        messages.append({"role": "user", "content": message})
+        # Add current message with context (same format as old version)
+        openai_messages.append({
+            "role": "user", 
+            "content": f"Context: {context}\n\nCustomer question: {message}"
+        })
         
-        # Get response
+        # Generate response with OpenAI (use settings from config)
         response = await self.openai_client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=messages,
-            temperature=0.7,
-            max_tokens=500
+            model=settings.openai_model,
+            messages=openai_messages,
+            temperature=settings.openai_temperature,
+            max_tokens=settings.openai_max_tokens,
+            timeout=300  # 5 minute timeout for OpenAI calls
         )
         
         return response.choices[0].message.content
+    
+    def _get_system_prompt(self, site_name: str) -> str:
+        """Get system prompt for the chatbot (same as old version)"""
+        if site_name == "store1":
+            site_info = "Mass Loaded Vinyl - specializing in soundproofing materials and acoustic solutions"
+        else:
+            site_info = f"Online store ({site_name})"
+            
+        return f"""You are a helpful customer service assistant for {site_info}.
+
+Your role:
+- Help customers find the right products for their needs
+- Provide accurate pricing and product information  
+- Explain shipping options and costs
+- Answer questions about soundproofing and acoustic materials
+- Be friendly, professional, and knowledgeable
+
+Guidelines:
+- Always use the provided product context when available
+- Include specific product names, SKUs, and prices when relevant
+- If you don't have specific information, say so and offer to help find it
+- Keep responses concise but helpful
+- Focus on solving the customer's problem
+
+Important limitations:
+- You CANNOT place orders, process payments, or complete transactions
+- You CANNOT access customer accounts or order history
+- Direct customers to the website to complete their purchase
+- Never offer to "place an order" or "help with checkout"
+
+When discussing shipping:
+- Always provide specific dollar amounts when available
+- If shipping cost shows "Calculated at checkout", explain it will be calculated based on their order total
+- Never mention percentages - always translate to dollar amounts or explain the calculation
+- Be clear about what affects shipping costs (location, order size, etc.)
+
+When recommending products:
+- Explain why the product fits their needs
+- Mention key features and benefits
+- Include pricing information exactly as provided (if price shows "from $X" then use "from $X")
+- For variable products with variations, explain the different options available (sizes, weights, attributes)
+- If a price range is provided, mention both the starting price and range (e.g., "from $122.59, with options ranging $122.59 - $450.00")
+- Mention specific variation details when relevant (e.g., "Available in 2kg, 4kg, 6kg, and 8kg/m² variants")
+- ALWAYS provide product page links as clickable HTML hyperlinks
+- MUST format links as HTML anchor tags: <a href="URL">Click here</a> or <a href="URL">product name</a>
+- NEVER use markdown format [text](url) - always use HTML <a href="url">text</a>
+- Suggest related or complementary products when appropriate
+- Direct them to visit the product page to see all variation options and add items to their cart"""
     
     def _extract_postcode(self, message: str) -> Optional[str]:
         """Extract Australian postcode from message"""
