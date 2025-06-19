@@ -129,6 +129,13 @@ ENV/
 env.bak/
 venv.bak/
 
+# Old cPanel files
+*_old.py
+*_wsgi_old.py
+
+# Zone Identifier files (Windows)
+*:Zone.Identifier
+
 # Spyder project settings
 .spyderproject
 .spyproject
