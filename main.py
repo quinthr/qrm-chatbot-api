@@ -113,10 +113,12 @@ async def general_exception_handler(request, exc):
 
 if __name__ == "__main__":
     import uvicorn
+    import os
+    port = int(os.environ.get("PORT", settings.api_port))
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
-        port=settings.api_port,
+        port=port,
         reload=settings.debug,
         log_level="debug" if settings.debug else "info"
     )
