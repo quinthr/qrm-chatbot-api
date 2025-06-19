@@ -85,9 +85,9 @@ class ChatResponse(BaseResponse):
     """Chat response with products and conversation ID"""
     response: str
     conversation_id: str
-    products: List[ProductResponse] = Field(default_factory=list)
-    suggested_actions: List[str] = Field(default_factory=list)
-    confidence_score: Optional[float] = Field(default=None, ge=0, le=1)
+    products: List[Dict[str, Any]] = Field(default_factory=list)  # Changed to Dict to match old format
+    categories: List[Dict[str, Any]] = Field(default_factory=list)
+    shipping_options: List[Dict[str, Any]] = Field(default_factory=list)
 
 # Search Models
 class ProductSearchRequest(BaseRequest):

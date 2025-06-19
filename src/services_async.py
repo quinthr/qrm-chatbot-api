@@ -389,12 +389,28 @@ class ChatService:
         except Exception as e:
             logger.warning(f"AI response saving disabled due to missing tables: {e}")
         
-        # Format response
+        # Get categories and format products for backward compatibility
+        categories = await self._get_categories(site_name)
+        
+        # Format products to match old structure with variations
+        formatted_products = await self._format_products_with_variations(products[:3], site_name)
+        
+        # Get shipping options based on found products
+        shipping_options = []
+        if products:
+            shipping_options = await self._get_shipping_options_for_products(
+                site_name, products, message
+            )
+        else:
+            shipping_options = await self._get_default_shipping_options(site_name)
+        
+        # Format response to match old structure exactly
         return ChatResponse(
             response=ai_response,
             conversation_id=conversation_id,
-            products=[ProductResponse(**p) for p in products[:5]],
-            suggested_actions=self._generate_suggestions(products)
+            products=formatted_products,
+            categories=categories,
+            shipping_options=shipping_options[:3]  # Limit to 3 options
         )
     
     async def _get_or_create_conversation(
@@ -581,3 +597,249 @@ class ChatService:
             suggestions.append("Search for products")
         
         return suggestions[:3]
+    
+    async def _format_products_with_variations(self, products: List[Dict], site_name: str) -> List[Dict[str, Any]]:
+        """Format products with variations to match old response structure"""
+        formatted_products = []
+        
+        try:
+            async with self.db.get_session() as session:
+                for product in products:
+                    # Get product with variations
+                    prod_stmt = select(Product).options(
+                        selectinload(Product.variations)
+                    ).where(Product.id == product['id'])
+                    
+                    prod_result = await session.execute(prod_stmt)
+                    prod = prod_result.scalar_one_or_none()
+                    
+                    if not prod:
+                        continue
+                    
+                    # Format variations
+                    variations = []
+                    has_variations = len(prod.variations) > 0
+                    
+                    for var in prod.variations:
+                        # Parse attributes
+                        var_attributes = []
+                        if var.attributes:
+                            try:
+                                attrs = json.loads(var.attributes) if isinstance(var.attributes, str) else var.attributes
+                                if isinstance(attrs, list):
+                                    var_attributes = attrs
+                                elif isinstance(attrs, dict):
+                                    var_attributes = [{"name": k, "option": v} for k, v in attrs.items()]
+                            except:
+                                pass
+                        
+                        variations.append({
+                            "id": var.woo_id,
+                            "sku": var.sku or prod.sku,
+                            "price": var.price or "0",
+                            "regular_price": var.regular_price or "",
+                            "sale_price": var.sale_price or "",
+                            "stock_quantity": var.stock_quantity,
+                            "stock_status": var.stock_status or "instock",
+                            "weight": var.weight or "",
+                            "dimensions": {
+                                "length": var.dimensions_length or "",
+                                "width": var.dimensions_width or "",
+                                "height": var.dimensions_height or ""
+                            },
+                            "attributes": var_attributes
+                        })
+                    
+                    # Calculate price display
+                    if has_variations and variations:
+                        prices = [float(v['price']) for v in variations if v['price'] and v['price'] != "0"]
+                        if prices:
+                            min_price = min(prices)
+                            display_price = f"from {min_price:.2f}"
+                        else:
+                            display_price = prod.price or "0"
+                    else:
+                        display_price = prod.price or "0"
+                    
+                    formatted_products.append({
+                        "id": prod.woo_id,
+                        "name": prod.name,
+                        "price": display_price,
+                        "price_range": None,  # Could calculate if needed
+                        "regular_price": prod.regular_price or "",
+                        "sale_price": prod.sale_price or "",
+                        "sku": prod.sku or "",
+                        "permalink": prod.permalink or "",
+                        "description": prod.description or "",
+                        "short_description": prod.short_description or "",
+                        "stock_status": prod.stock_status or "instock",
+                        "stock_quantity": prod.stock_quantity,
+                        "has_variations": has_variations,
+                        "variations": variations,
+                        "variation_count": len(variations)
+                    })
+                    
+        except Exception as e:
+            logger.error(f"Error formatting products: {e}")
+            # Return basic format if detailed formatting fails
+            return products[:3]
+            
+        return formatted_products
+    
+    async def _get_shipping_options_for_products(
+        self, 
+        site_name: str, 
+        products: List[Dict],
+        message: str
+    ) -> List[Dict[str, Any]]:
+        """Get shipping options based on products in cart"""
+        import re
+        
+        # Extract postcode from message if present
+        postcode = None
+        postcode_match = re.search(r'\b(\d{4})\b', message)
+        if postcode_match:
+            postcode = postcode_match.group(1)
+        
+        try:
+            async with self.db.get_session() as session:
+                # Get site
+                site_stmt = select(Site).where(Site.name == site_name)
+                site_result = await session.execute(site_stmt)
+                site = site_result.scalar_one_or_none()
+                
+                if not site:
+                    return []
+                
+                # Get product IDs
+                product_ids = [p['id'] for p in products]
+                
+                # Get shipping options using the existing method
+                shipping_options = await self.kb_service.get_shipping_options_for_products(
+                    site_name, product_ids, postcode
+                )
+                
+                # Format for response
+                formatted_options = []
+                for option in shipping_options:
+                    # Determine cost display
+                    cost = option.cost
+                    if isinstance(cost, (int, float)):
+                        display_cost = f"${cost:.2f}"
+                        cost_type = "fixed" if cost > 0 else "free"
+                    else:
+                        display_cost = str(cost)
+                        cost_type = "variable"
+                    
+                    formatted_options.append({
+                        "method_id": option.method_id.split('_')[1] if '_' in option.method_id else option.method_id,
+                        "title": option.method_title,
+                        "cost": display_cost,
+                        "cost_type": cost_type,
+                        "raw_cost": str(cost),
+                        "description": option.method_title
+                    })
+                
+                return formatted_options
+                
+        except Exception as e:
+            logger.error(f"Error getting shipping options for products: {e}")
+            return await self._get_default_shipping_options(site_name)
+    
+    async def _get_categories(self, site_name: str) -> List[Dict[str, Any]]:
+        """Get all categories for a site"""
+        try:
+            async with self.db.get_session() as session:
+                # Get site
+                site_stmt = select(Site).where(Site.name == site_name)
+                site_result = await session.execute(site_stmt)
+                site = site_result.scalar_one_or_none()
+                
+                if not site:
+                    return []
+                
+                # Get categories
+                cat_stmt = select(Category).where(Category.site_id == site.id)
+                cat_result = await session.execute(cat_stmt)
+                categories = cat_result.scalars().all()
+                
+                return [
+                    {
+                        "id": cat.woo_id,
+                        "name": cat.name,
+                        "slug": cat.slug or "",
+                        "description": cat.description or ""
+                    }
+                    for cat in categories
+                ]
+        except Exception as e:
+            logger.error(f"Error getting categories: {e}")
+            return []
+    
+    async def _get_default_shipping_options(self, site_name: str) -> List[Dict[str, Any]]:
+        """Get default shipping options for a site"""
+        try:
+            async with self.db.get_session() as session:
+                # Get site
+                site_stmt = select(Site).where(Site.name == site_name)
+                site_result = await session.execute(site_stmt)
+                site = site_result.scalar_one_or_none()
+                
+                if not site:
+                    return []
+                
+                # Get shipping zones with methods
+                zones_stmt = select(ShippingZone).options(
+                    selectinload(ShippingZone.methods)
+                ).where(ShippingZone.site_id == site.id)
+                
+                zones_result = await session.execute(zones_stmt)
+                zones = zones_result.scalars().all()
+                
+                shipping_options = []
+                for zone in zones[:3]:  # Limit to first 3 zones
+                    for method in zone.methods:
+                        if not method.enabled:
+                            continue
+                            
+                        # Parse cost from settings
+                        settings = json.loads(method.settings) if method.settings else {}
+                        cost = settings.get("cost", "0")
+                        
+                        # Determine cost type and display
+                        if "[fee" in str(cost):
+                            cost_type = "percentage"
+                            display_cost = self._extract_fee_range(cost)
+                        elif cost and cost != "0":
+                            cost_type = "fixed"
+                            display_cost = f"${cost}"
+                        else:
+                            cost_type = "fixed"
+                            display_cost = "$0.00"
+                        
+                        shipping_options.append({
+                            "method_id": method.method_id,
+                            "title": method.title or method.method_title,
+                            "cost": display_cost,
+                            "cost_type": cost_type,
+                            "raw_cost": cost,
+                            "description": method.title or method.method_title
+                        })
+                
+                return shipping_options
+        except Exception as e:
+            logger.error(f"Error getting shipping options: {e}")
+            return []
+    
+    def _extract_fee_range(self, fee_string: str) -> str:
+        """Extract min and max fee from fee string"""
+        import re
+        min_match = re.search(r'min_fee="(\d+)"', fee_string)
+        max_match = re.search(r'max_fee="(\d+)"', fee_string)
+        
+        if min_match and max_match:
+            return f"${min_match.group(1)}.00 - ${max_match.group(1)}.00"
+        elif min_match:
+            return f"${min_match.group(1)}.00+"
+        else:
+            return "Variable"
