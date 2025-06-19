@@ -343,15 +343,22 @@ class ChatService:
         if not conversation_id:
             conversation_id = f"qrm_{uuid.uuid4().hex[:12]}"
         
-        # Get conversation history
-        history = await self._get_or_create_conversation(
-            conversation_id, site_name, user_id
-        )
+        # Get conversation history (gracefully handle missing tables)
+        try:
+            history = await self._get_or_create_conversation(
+                conversation_id, site_name, user_id
+            )
+        except Exception as e:
+            logger.warning(f"Conversation history disabled due to missing tables: {e}")
+            history = []
         
-        # Save user message
-        await self._save_message(
-            conversation_id, MessageRole.USER, message
-        )
+        # Save user message (gracefully handle missing tables)
+        try:
+            await self._save_message(
+                conversation_id, MessageRole.USER, message
+            )
+        except Exception as e:
+            logger.warning(f"Message saving disabled due to missing tables: {e}")
         
         # Extract search terms and search for products
         search_terms = await self._extract_search_terms(message)
@@ -374,10 +381,13 @@ class ChatService:
             message, history, context
         )
         
-        # Save AI response
-        await self._save_message(
-            conversation_id, MessageRole.ASSISTANT, ai_response
-        )
+        # Save AI response (gracefully handle missing tables)
+        try:
+            await self._save_message(
+                conversation_id, MessageRole.ASSISTANT, ai_response
+            )
+        except Exception as e:
+            logger.warning(f"AI response saving disabled due to missing tables: {e}")
         
         # Format response
         return ChatResponse(

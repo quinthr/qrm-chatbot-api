@@ -1,55 +1,58 @@
 #!/usr/bin/env python3
 """
-Create conversation tables for chat history storage
+Create missing conversation tables in PostgreSQL database
 """
-from sqlalchemy import create_engine, text
-from src.config import config
+import asyncio
+import asyncpg
+import os
+from pathlib import Path
 
-def create_conversation_tables():
-    """Create conversation and conversation_messages tables"""
-    engine = create_engine(config.database.url)
+# Database URL from environment
+DATABASE_URL = "postgresql://qrm_chatbot_knowledge_base_user:N1G9a7BpQrAXdPg30q8xnIjMGZpg08OX@dpg-d19t1hidbo4c73brmnt0-a.singapore-postgres.render.com/qrm_chatbot_knowledge_base"
+
+async def create_tables():
+    """Create conversation tables"""
+    print("Connecting to PostgreSQL database...")
     
-    with engine.connect() as conn:
-        # Create conversations table
-        conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS conversations (
-                id INTEGER PRIMARY KEY AUTO_INCREMENT,
-                site_id INTEGER NOT NULL,
-                conversation_id VARCHAR(255) NOT NULL UNIQUE,
-                user_id VARCHAR(255),
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                FOREIGN KEY (site_id) REFERENCES sites(id)
-            )
-        """))
+    try:
+        # Connect to database
+        conn = await asyncpg.connect(DATABASE_URL)
         
-        # Create conversation_messages table
-        conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS conversation_messages (
-                id INTEGER PRIMARY KEY AUTO_INCREMENT,
-                conversation_id VARCHAR(255) NOT NULL,
-                role VARCHAR(20) NOT NULL,
-                content TEXT NOT NULL,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (conversation_id) REFERENCES conversations(conversation_id)
-            )
-        """))
+        # Read SQL file
+        sql_file = Path(__file__).parent / "add_conversation_tables.sql"
+        with open(sql_file, 'r') as f:
+            sql_commands = f.read()
         
-        # Create indexes for better performance
-        conn.execute(text("""
-            CREATE INDEX IF NOT EXISTS idx_conversations_site_id ON conversations(site_id)
-        """))
+        print("Creating conversation tables...")
         
-        conn.execute(text("""
-            CREATE INDEX IF NOT EXISTS idx_conversation_messages_conversation_id ON conversation_messages(conversation_id)
-        """))
+        # Execute SQL commands
+        await conn.execute(sql_commands)
         
-        conn.execute(text("""
-            CREATE INDEX IF NOT EXISTS idx_conversation_messages_created_at ON conversation_messages(created_at)
-        """))
-        
-        conn.commit()
         print("✅ Conversation tables created successfully!")
+        
+        # Verify tables exist
+        tables = await conn.fetch("""
+            SELECT table_name 
+            FROM information_schema.tables 
+            WHERE table_schema = 'public' 
+            AND table_name IN ('conversations', 'conversation_messages')
+            ORDER BY table_name
+        """)
+        
+        print(f"✅ Verified tables: {[t['table_name'] for t in tables]}")
+        
+        await conn.close()
+        
+    except Exception as e:
+        print(f"❌ Error: {e}")
+        return False
+    
+    return True
 
 if __name__ == "__main__":
-    create_conversation_tables()
+    success = asyncio.run(create_tables())
+    if success:
+        print("🎉 Database migration completed successfully!")
+    else:
+        print("💥 Database migration failed!")
+        exit(1)
