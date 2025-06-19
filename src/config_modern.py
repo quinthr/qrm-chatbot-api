@@ -55,9 +55,9 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = Field(default=30)
     
     # CORS
-    cors_origins: List[str] = Field(
-        default=["*"],
-        description="Allowed CORS origins"
+    cors_origins: str = Field(
+        default="*",
+        description="Allowed CORS origins (comma-separated)"
     )
     
     # Rate limiting
@@ -73,13 +73,15 @@ class Settings(BaseSettings):
         description="Logging level"
     )
     
-    @field_validator('cors_origins', mode='before')
-    def parse_cors_origins(cls, v):
-        if isinstance(v, str):
-            return [origin.strip() for origin in v.split(',')]
-        return v
+    @property
+    def cors_origins_list(self) -> List[str]:
+        """Parse CORS origins string into list"""
+        if isinstance(self.cors_origins, str):
+            return [origin.strip() for origin in self.cors_origins.split(',') if origin.strip()]
+        return [self.cors_origins]
     
     @field_validator('debug', mode='before')
+    @classmethod
     def parse_debug(cls, v):
         if isinstance(v, str):
             return v.lower() in ('true', '1', 'yes', 'on')

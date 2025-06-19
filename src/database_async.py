@@ -10,7 +10,7 @@ from sqlalchemy.pool import NullPool
 import chromadb
 from chromadb.config import Settings
 
-from .config import settings
+from .config_modern import settings
 
 logger = logging.getLogger(__name__)
 
