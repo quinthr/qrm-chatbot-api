@@ -65,7 +65,8 @@ class Database:
             # Test connection with timeout
             try:
                 async with self.engine.begin() as conn:
-                    await conn.execute("SELECT 1")
+                    from sqlalchemy import text
+                    await conn.execute(text("SELECT 1"))
                 logger.info("PostgreSQL connection initialized successfully")
             except Exception as conn_err:
                 logger.warning(f"PostgreSQL connection test failed: {conn_err}")

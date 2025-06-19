@@ -134,60 +134,135 @@ async def get_sqlalchemy_models(db = Depends(get_db)) -> Dict[str, Any]:
         raise HTTPException(status_code=503, detail="Database not available")
     
     try:
-        # Import the models to get their definitions
-        from ..services_async import KnowledgeBaseService
+        models_info = {
+            "tables": {},
+            "relationships": {},
+            "total_tables": 0
+        }
         
         async with db.get_session() as session:
-            # Use SQLAlchemy inspector
-            inspector = inspect(session.bind)
-            
-            models_info = {
-                "tables": {},
-                "relationships": {},
-                "total_tables": 0
-            }
-            
-            table_names = inspector.get_table_names()
+            # Get table information using SQL queries
+            tables_result = await session.execute(text("""
+                SELECT table_name 
+                FROM information_schema.tables 
+                WHERE table_schema = 'public' 
+                ORDER BY table_name
+            """))
+            table_names = [row[0] for row in tables_result.fetchall()]
             models_info["total_tables"] = len(table_names)
             
             for table_name in table_names:
-                # Get columns with SQLAlchemy inspector
-                columns = inspector.get_columns(table_name)
-                primary_keys = inspector.get_pk_constraint(table_name)
-                foreign_keys = inspector.get_foreign_keys(table_name)
-                indexes = inspector.get_indexes(table_name)
+                # Get columns
+                columns_result = await session.execute(text("""
+                    SELECT 
+                        column_name,
+                        data_type,
+                        is_nullable,
+                        column_default,
+                        character_maximum_length,
+                        numeric_precision,
+                        numeric_scale
+                    FROM information_schema.columns 
+                    WHERE table_schema = 'public' 
+                    AND table_name = :table_name
+                    ORDER BY ordinal_position
+                """), {"table_name": table_name})
+                
+                columns = []
+                for col in columns_result.fetchall():
+                    column_info = {
+                        "name": col[0],
+                        "type": col[1],
+                        "nullable": col[2] == "YES",
+                        "default": col[3],
+                        "max_length": col[4],
+                        "numeric_precision": col[5],
+                        "numeric_scale": col[6]
+                    }
+                    # Check if it's an auto-increment column
+                    if col[3] and "nextval" in str(col[3]):
+                        column_info["autoincrement"] = True
+                    columns.append(column_info)
+                
+                # Get primary keys
+                pk_result = await session.execute(text("""
+                    SELECT column_name
+                    FROM information_schema.key_column_usage
+                    WHERE table_schema = 'public'
+                    AND table_name = :table_name
+                    AND constraint_name = (
+                        SELECT constraint_name
+                        FROM information_schema.table_constraints
+                        WHERE table_schema = 'public'
+                        AND table_name = :table_name
+                        AND constraint_type = 'PRIMARY KEY'
+                    )
+                    ORDER BY ordinal_position
+                """), {"table_name": table_name})
+                primary_keys = [row[0] for row in pk_result.fetchall()]
+                
+                # Get foreign keys
+                fk_result = await session.execute(text("""
+                    SELECT
+                        kcu.column_name,
+                        ccu.table_name AS foreign_table_name,
+                        ccu.column_name AS foreign_column_name
+                    FROM information_schema.table_constraints AS tc
+                    JOIN information_schema.key_column_usage AS kcu
+                        ON tc.constraint_name = kcu.constraint_name
+                        AND tc.table_schema = kcu.table_schema
+                    JOIN information_schema.constraint_column_usage AS ccu
+                        ON ccu.constraint_name = tc.constraint_name
+                        AND ccu.table_schema = tc.table_schema
+                    WHERE tc.constraint_type = 'FOREIGN KEY'
+                    AND tc.table_schema = 'public'
+                    AND tc.table_name = :table_name
+                """), {"table_name": table_name})
+                
+                foreign_keys = []
+                for fk in fk_result.fetchall():
+                    foreign_keys.append({
+                        "constrained_columns": [fk[0]],
+                        "referred_table": fk[1],
+                        "referred_columns": [fk[2]]
+                    })
+                
+                # Get indexes
+                idx_result = await session.execute(text("""
+                    SELECT
+                        i.relname AS index_name,
+                        a.attname AS column_name,
+                        ix.indisunique AS is_unique
+                    FROM pg_class t
+                    JOIN pg_index ix ON t.oid = ix.indrelid
+                    JOIN pg_class i ON i.oid = ix.indexrelid
+                    JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY(ix.indkey)
+                    WHERE t.relkind = 'r'
+                    AND t.relname = :table_name
+                    AND t.relnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'public')
+                    ORDER BY i.relname, a.attnum
+                """), {"table_name": table_name})
+                
+                # Group indexes by name
+                indexes_dict = {}
+                for idx in idx_result.fetchall():
+                    idx_name = idx[0]
+                    if idx_name not in indexes_dict:
+                        indexes_dict[idx_name] = {
+                            "name": idx_name,
+                            "columns": [],
+                            "unique": idx[2]
+                        }
+                    indexes_dict[idx_name]["columns"].append(idx[1])
                 
                 models_info["tables"][table_name] = {
-                    "columns": [
-                        {
-                            "name": col["name"],
-                            "type": str(col["type"]),
-                            "nullable": col["nullable"],
-                            "default": str(col["default"]) if col["default"] is not None else None,
-                            "autoincrement": col.get("autoincrement", False)
-                        }
-                        for col in columns
-                    ],
-                    "primary_keys": primary_keys["constrained_columns"] if primary_keys else [],
-                    "foreign_keys": [
-                        {
-                            "constrained_columns": fk["constrained_columns"],
-                            "referred_table": fk["referred_table"],
-                            "referred_columns": fk["referred_columns"]
-                        }
-                        for fk in foreign_keys
-                    ],
-                    "indexes": [
-                        {
-                            "name": idx["name"],
-                            "columns": idx["column_names"],
-                            "unique": idx["unique"]
-                        }
-                        for idx in indexes
-                    ]
+                    "columns": columns,
+                    "primary_keys": primary_keys,
+                    "foreign_keys": foreign_keys,
+                    "indexes": list(indexes_dict.values())
                 }
-            
-            return models_info
+        
+        return models_info
             
     except Exception as e:
         logger.error(f"Error getting SQLAlchemy models: {e}")
