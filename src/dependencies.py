@@ -2,8 +2,8 @@
 from fastapi import Request
 from typing import Dict, Any
 
-from .database import Database
-from .services import ChatService, KnowledgeBaseService
+from .database_async import Database
+from .services_async import ChatService, KnowledgeBaseService
 
 def get_db(request: Request) -> Database:
     """Get database instance from app state"""

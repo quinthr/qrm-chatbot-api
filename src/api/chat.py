@@ -3,9 +3,9 @@ from fastapi import APIRouter, HTTPException, Depends
 from typing import Optional
 import logging
 
-from ..models import ChatRequest, ChatResponse
+from ..models_modern import ChatRequest, ChatResponse
 from ..dependencies import get_chat_service
-from ..services import ChatService
+from ..services_async import ChatService
 
 logger = logging.getLogger(__name__)
 router = APIRouter()

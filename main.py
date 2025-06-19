@@ -8,10 +8,10 @@ from contextlib import asynccontextmanager
 import logging
 from typing import Optional
 
-from src.config import settings
-from src.database import Database
-from src.services import ChatService, KnowledgeBaseService
-from src.models import (
+from src.config_modern import settings
+from src.database_async import Database
+from src.services_async import ChatService, KnowledgeBaseService
+from src.models_modern import (
     ChatRequest, ChatResponse,
     ProductSearchRequest, ProductSearchResponse,
     ShippingCalculateRequest, ShippingCalculateResponse

@@ -3,9 +3,9 @@ from fastapi import APIRouter, HTTPException, Depends, Query
 from typing import List, Optional
 import logging
 
-from ..models import ProductSearchRequest, ProductSearchResponse, ProductResponse
+from ..models_modern import ProductSearchRequest, ProductSearchResponse, ProductResponse
 from ..dependencies import get_kb_service
-from ..services import KnowledgeBaseService
+from ..services_async import KnowledgeBaseService
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
