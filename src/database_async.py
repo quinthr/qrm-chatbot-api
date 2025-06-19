@@ -24,20 +24,27 @@ class Database:
         
     async def initialize(self):
         """Initialize database connections"""
-        # Initialize MySQL
-        await self._init_mysql()
+        # Initialize PostgreSQL
+        await self._init_postgresql()
         
         # Initialize ChromaDB
         await self._init_chromadb()
         
-    async def _init_mysql(self):
-        """Initialize MySQL connection"""
+    async def _init_postgresql(self):
+        """Initialize PostgreSQL connection"""
         try:
-            # Convert sync URL to async
-            db_url = settings.database_url.replace(
-                "mysql+pymysql://", 
-                "mysql+aiomysql://"
-            )
+            # Ensure we have a PostgreSQL URL
+            db_url = settings.database_url
+            if "mysql" in db_url:
+                # Convert MySQL URL to PostgreSQL format
+                db_url = db_url.replace("mysql+pymysql://", "postgresql+asyncpg://")
+            elif "postgresql://" in db_url:
+                # Convert sync URL to async
+                db_url = db_url.replace("postgresql://", "postgresql+asyncpg://")
+            elif not "postgresql+asyncpg://" in db_url:
+                # Assume it's already correct or needs asyncpg
+                if "postgresql" not in db_url:
+                    raise ValueError(f"Invalid database URL format: {db_url}")
             
             self.engine = create_async_engine(
                 db_url,
@@ -59,13 +66,13 @@ class Database:
             try:
                 async with self.engine.begin() as conn:
                     await conn.execute("SELECT 1")
-                logger.info("MySQL connection initialized successfully")
+                logger.info("PostgreSQL connection initialized successfully")
             except Exception as conn_err:
-                logger.warning(f"MySQL connection test failed: {conn_err}")
+                logger.warning(f"PostgreSQL connection test failed: {conn_err}")
                 # Continue without raising - allow graceful degradation
                 
         except Exception as e:
-            logger.error(f"Failed to initialize MySQL: {e}")
+            logger.error(f"Failed to initialize PostgreSQL: {e}")
             # Don't raise - allow app to start without database
             self.engine = None
             self.async_session = None

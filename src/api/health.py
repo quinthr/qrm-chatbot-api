@@ -22,24 +22,24 @@ async def detailed_health_check(
         "status": "healthy",
         "services": {
             "api": "operational",
-            "mysql": "unknown",
+            "postgresql": "unknown", 
             "chromadb": "unknown",
             "openai": "configured"
         }
     }
     
-    # Check MySQL
+    # Check PostgreSQL
     try:
         if db.async_session:
             async with db.get_session() as session:
                 result = await session.execute(text("SELECT 1"))
                 if result.scalar() == 1:
-                    health_status["services"]["mysql"] = "operational"
+                    health_status["services"]["postgresql"] = "operational"
         else:
-            health_status["services"]["mysql"] = "not initialized"
+            health_status["services"]["postgresql"] = "not initialized"
             health_status["status"] = "degraded"
     except Exception as e:
-        health_status["services"]["mysql"] = f"error: {str(e)}"
+        health_status["services"]["postgresql"] = f"error: {str(e)}"
         health_status["status"] = "degraded"
     
     # Check ChromaDB
