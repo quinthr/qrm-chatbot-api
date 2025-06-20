@@ -1,103 +1,118 @@
 {
-  "conversation_date": "2025-01-17",
-  "session_summary": "Continued work on QRM Chatbot API from previous conversation. Implemented shipping class rates integration for product-specific shipping costs. Made product URLs clickable, added 'from' pricing for variable products, fixed shipping method titles, and implemented comprehensive shipping class-based cost calculations.",
+  "conversation_date": "2025-01-21",
+  "session_summary": "Major migration and fixes: Moved from VentraIP MySQL (blocked external connections) to Render PostgreSQL. Fixed broken vector search by implementing enhanced SQL search matching the working sync version. Restored backward compatibility with WordPress plugin.",
   "main_issues_addressed": {
-    "shipping_class_integration": {
-      "problem": "Need product-specific shipping costs based on shipping classes",
-      "solution": "Added ShippingClassRate model and get_shipping_options_for_products() method",
+    "database_migration": {
+      "problem": "VentraIP MySQL blocked external connections from Render",
+      "solution": "Migrated to PostgreSQL on Render platform",
       "implementation": [
-        "Added ShippingClassRate model to db_models.py",
-        "Implemented get_shipping_options_for_products() method",
-        "Added _extract_numeric_cost() helper for parsing costs",
-        "Updated ChatService to use product-aware shipping when products found",
-        "Uses highest rate when multiple shipping classes apply"
+        "Created PostgreSQL schema from MySQL",
+        "Updated both API and knowledge base for PostgreSQL",
+        "Fixed async SQLAlchemy PostgreSQL compatibility",
+        "Added graceful fallback for missing conversation tables"
       ],
-      "status": "✅ Implemented and pushed to GitHub"
+      "status": "✅ Completed"
     },
-    "product_urls_clickable": {
-      "problem": "Product URLs not clickable in chatbot responses",
-      "solution": "Updated system prompt to use HTML anchor tags instead of markdown",
-      "format": "<a href=\"URL\">text</a> instead of [text](url)",
+    "vector_search_broken": {
+      "problem": "Chat endpoint returning empty products array",
+      "root_cause": "ChromaDB not working, trying to use PostgreSQL instead of MySQL",
+      "solution": "Implemented enhanced SQL search matching working sync version",
+      "implementation": [
+        "Disabled broken ChromaDB in async version",
+        "Added multi-field SQL search with relevance scoring",
+        "Search fields: name, description, short_description, sku, shipping_class",
+        "Relevance weights: name=3x, short_description=2x, others=1x"
+      ],
       "status": "✅ Fixed"
     },
-    "variable_product_pricing": {
-      "problem": "Variable products showing confusing pricing to customers",
-      "solution": "Implemented 'from' pricing display for products with variations",
-      "example": "Shows 'from $122.59' instead of just '$122.59'",
-      "status": "✅ Implemented"
+    "wordpress_plugin_compatibility": {
+      "problem": "Response format changed, breaking WordPress plugin",
+      "solution": "Restored exact response format from old working version",
+      "changes": [
+        "Kept products array with variations, has_variations, variation_count",
+        "Kept categories and shipping_options arrays",
+        "Removed new fields: suggested_actions, confidence_score",
+        "Fixed product formatting with 'from' pricing for variations"
+      ],
+      "status": "✅ Restored compatibility"
     },
-    "shipping_method_titles": {
-      "problem": "Showing generic 'Flat rate' instead of proper shipping method names",
-      "solution": "Use title column from database showing names like 'Free Pickup Footscray 3011'",
+    "openai_configuration": {
+      "problem": "Hardcoded OpenAI model instead of using config",
+      "solution": "Use settings.openai_model from .env (gpt-4o-mini)",
       "status": "✅ Fixed"
-    },
-    "attributeerror_fixes": {
-      "problem": "Persistent AttributeError causing RetryError in API",
-      "solution": "Implemented safe attribute access using getattr() throughout codebase",
-      "pattern": "getattr(object, 'attribute', default_value)",
-      "status": "✅ Fixed"
-    },
-    "conversation_context": {
-      "problem": "API doesn't remember previous messages in conversation",
-      "solution": "Added Conversation and ConversationMessage models with database storage",
-      "migration_needed": "python create_conversation_tables.py",
-      "status": "✅ Implemented, deployed"
     }
   },
   "technical_implementations": {
-    "shipping_class_rates": {
-      "model": "ShippingClassRate with site_id, method_id, shipping_class_id, cost, calculation_type",
-      "algorithm": "Finds products' shipping classes, queries class rates, uses highest applicable rate",
-      "fallback": "Uses standard shipping options if no class-specific rates found"
+    "postgresql_migration": {
+      "connection_string": "postgresql://...@dpg-d19t1hidbo4c73brmnt0-a.singapore-postgres.render.com/...",
+      "schema_conversion": "SERIAL instead of AUTO_INCREMENT, JSONB for JSON fields",
+      "async_driver": "asyncpg for SQLAlchemy async support"
     },
-    "variation_handling": {
-      "approach": "Simple variation support with just price and attributes",
-      "pricing_logic": "If variations exist, show 'from {base_price}' format",
-      "data_structure": "variations array with price and attributes only"
+    "enhanced_sql_search": {
+      "algorithm": "Multi-field search with relevance scoring",
+      "fields": "name, description, short_description, sku, shipping_class",
+      "scoring": "name matches = 3x weight, short_description = 2x, others = 1x",
+      "word_splitting": "Splits queries into words for better matching"
     },
-    "safe_attribute_access": {
-      "pattern": "getattr(object, 'attribute', default_value)",
-      "applied_to": "All product, variation, and database object access",
-      "prevents": "AttributeError exceptions from NULL/empty database values"
+    "search_term_extraction": {
+      "product_keywords": "['mass loaded vinyl', 'mlv', 'soundproofing', 'acoustic', etc.]",
+      "fallback": "Remove question words and use remaining terms",
+      "default": "'soundproofing' if no terms found"
     }
   },
   "api_details": {
-    "url": "https://qrm-chatbot-api.com.soundproofingproducts.com.au",
-    "test_endpoints": {
-      "chat": "curl -X POST https://qrm-chatbot-api.com.soundproofingproducts.com.au/chat -H \"Content-Type: application/json\" -d '{\"message\": \"Hello\", \"site_name\": \"store1\"}'",
-      "product_shipping": "curl -X POST https://qrm-chatbot-api.com.soundproofingproducts.com.au/chat -H \"Content-Type: application/json\" -d '{\"message\": \"I need MLV rolls for soundproofing. What are my shipping options to 3011?\", \"site_name\": \"store1\"}'"
-    }
+    "old_url": "https://qrm-chatbot-api.com.soundproofingproducts.com.au (VentraIP)",
+    "new_url": "https://qrm-chatbot-api-qzgf.onrender.com (Render)",
+    "endpoints": {
+      "chat": "/api/v1/chat (main endpoint, was broken)",
+      "health": "/health/detailed",
+      "db_schema": "/db-schema",
+      "sqlalchemy_models": "/sqlalchemy-models (fixed async inspection error)"
+    },
+    "test_request": "POST /api/v1/chat with {\"message\": \"4kg Mass Loaded Vinyl price? Postcode 3000\", \"site_name\": \"store1\", \"conversation_id\": \"test123\"}"
   },
   "database_changes": {
-    "new_tables": [
-      "conversations (id, site_id, conversation_id, user_id, created_at, updated_at)",
-      "conversation_messages (id, conversation_id, role, content, created_at)",
-      "shipping_class_rates (id, site_id, method_id, shipping_class_id, cost, calculation_type)"
-    ],
-    "migrations_needed": [
-      "python create_conversation_tables.py (if not already run)",
-      "Shipping class rates table should be created by your data import process"
-    ]
+    "migration_from_mysql_to_postgresql": {
+      "tables_migrated": "All 10 tables including products, variations, shipping, categories",
+      "data_status": "Successfully populated by knowledge base crawler",
+      "missing_tables": "conversations, conversation_messages (graceful fallback added)"
+    },
+    "current_schema": {
+      "sites": "1 row (store configuration)",
+      "products": "8 rows with variations",
+      "product_variations": "25 rows",
+      "shipping_zones": "15 rows",
+      "shipping_methods": "17 rows",
+      "shipping_class_rates": "56 rows"
+    }
   },
   "github_commits": [
     {
-      "commit": "723ba0ed",
-      "message": "Implement shipping class rates integration for product-specific shipping costs",
-      "files": ["src/db_models.py", "src/services.py"],
-      "features": [
-        "ShippingClassRate model",
-        "get_shipping_options_for_products() method", 
-        "_extract_numeric_cost() helper",
-        "Product-aware shipping in ChatService"
+      "commit": "b9277efc",
+      "message": "Fix vector search to match working sync version",
+      "changes": [
+        "Disabled broken ChromaDB",
+        "Implemented enhanced SQL search",
+        "Fixed database configuration"
       ]
     },
     {
-      "commit": "9896e02d",
-      "message": "Add simple variation support with just price and attributes"
+      "commit": "32d9feb5",
+      "message": "Match old working version exactly",
+      "changes": [
+        "Use same search approach",
+        "Use same system prompt",
+        "Use config for OpenAI model"
+      ]
     },
     {
-      "commit": "0c5bb62f", 
-      "message": "Remove $0.00 filter to show free pickup shipping options"
+      "commit": "2230e7c3",
+      "message": "Restore backward compatibility for WordPress plugin",
+      "changes": [
+        "Match old ChatResponse format",
+        "Include full product variations",
+        "Calculate shipping based on products"
+      ]
     }
   ],
   "file_structure_context": {
@@ -119,10 +134,16 @@
     "variation_pricing_test": "Verify products with variations show 'from' pricing"
   },
   "next_steps": [
-    "Test shipping class integration on production",
-    "Verify product-specific shipping costs are calculated correctly",
-    "Monitor for any new AttributeError issues",
-    "Consider adding cart total parameter for percentage-based shipping class rates",
-    "Test conversation history persistence"
-  ]
+    "Test /api/v1/chat endpoint to verify products are found",
+    "Verify exact price ($209.21) and shipping ($55.00) match old version",
+    "Create conversation tables: add_conversation_tables.sql",
+    "Monitor Render deployment for stability",
+    "Consider implementing actual vector search with ChromaDB later"
+  ],
+  "working_example": {
+    "request": "4kg Mass Loaded Vinyl price? Postcode 3000",
+    "expected_product": "Mass Loaded Vinyl (MLV) Acoustic Barrier",
+    "expected_price": "$209.21 for 4kg Full Roll",
+    "expected_shipping": "$55.00 Courier or Free Pickup Footscray 3011"
+  }
 }
