@@ -24,27 +24,26 @@ class Database:
         
     async def initialize(self):
         """Initialize database connections"""
-        # Initialize PostgreSQL
-        await self._init_postgresql()
+        # Initialize Database (MySQL/SQLite)
+        await self._init_database()
         
-        # Initialize ChromaDB
-        await self._init_chromadb()
+        # ChromaDB disabled for hosting compatibility (like sync version)
+        logger.info("ChromaDB disabled for hosting compatibility - using SQL search")
         
-    async def _init_postgresql(self):
-        """Initialize PostgreSQL connection"""
+    async def _init_database(self):
+        """Initialize MySQL connection (async version)"""
         try:
-            # Ensure we have a PostgreSQL URL
+            # Use MySQL with asyncmy driver
             db_url = settings.database_url
-            if "mysql" in db_url:
-                # Convert MySQL URL to PostgreSQL format
-                db_url = db_url.replace("mysql+pymysql://", "postgresql+asyncpg://")
-            elif "postgresql://" in db_url:
-                # Convert sync URL to async
-                db_url = db_url.replace("postgresql://", "postgresql+asyncpg://")
-            elif not "postgresql+asyncpg://" in db_url:
-                # Assume it's already correct or needs asyncpg
-                if "postgresql" not in db_url:
-                    raise ValueError(f"Invalid database URL format: {db_url}")
+            if "mysql+pymysql://" in db_url:
+                # Convert to async MySQL driver
+                db_url = db_url.replace("mysql+pymysql://", "mysql+aiomysql://")
+            elif "mysql://" in db_url:
+                # Convert to async MySQL driver  
+                db_url = db_url.replace("mysql://", "mysql+aiomysql://")
+            elif "sqlite://" in db_url:
+                # Keep SQLite as-is (can be async)
+                db_url = db_url.replace("sqlite://", "sqlite+aiosqlite://")
             
             self.engine = create_async_engine(
                 db_url,
@@ -67,43 +66,17 @@ class Database:
                 async with self.engine.begin() as conn:
                     from sqlalchemy import text
                     await conn.execute(text("SELECT 1"))
-                logger.info("PostgreSQL connection initialized successfully")
+                logger.info("Database connection initialized successfully")
             except Exception as conn_err:
-                logger.warning(f"PostgreSQL connection test failed: {conn_err}")
+                logger.warning(f"Database connection test failed: {conn_err}")
                 # Continue without raising - allow graceful degradation
                 
         except Exception as e:
-            logger.error(f"Failed to initialize PostgreSQL: {e}")
+            logger.error(f"Failed to initialize database: {e}")
             # Don't raise - allow app to start without database
             self.engine = None
             self.async_session = None
     
-    async def _init_chromadb(self):
-        """Initialize ChromaDB connection"""
-        try:
-            if settings.chroma_persist_directory:
-                # Persistent ChromaDB
-                self.chroma_client = chromadb.PersistentClient(
-                    path=settings.chroma_persist_directory,
-                    settings=Settings(
-                        anonymized_telemetry=False,
-                        allow_reset=True
-                    )
-                )
-            else:
-                # In-memory ChromaDB for testing
-                self.chroma_client = chromadb.Client(
-                    settings=Settings(
-                        anonymized_telemetry=False,
-                        is_persistent=False
-                    )
-                )
-            
-            logger.info("ChromaDB initialized successfully")
-            
-        except Exception as e:
-            logger.error(f"Failed to initialize ChromaDB: {e}")
-            # Don't raise - ChromaDB is optional
     
     @asynccontextmanager
     async def get_session(self):
@@ -122,14 +95,8 @@ class Database:
                 await session.close()
     
     def get_collection(self, name: str):
-        """Get or create ChromaDB collection"""
-        if not self.chroma_client:
-            raise RuntimeError("ChromaDB not initialized")
-            
-        try:
-            return self.chroma_client.get_collection(name)
-        except:
-            return self.chroma_client.create_collection(name)
+        """ChromaDB disabled - return None"""
+        return None
     
     async def search_vectors(
         self, 
@@ -138,30 +105,13 @@ class Database:
         filter_dict: Optional[Dict] = None,
         n_results: int = 10
     ) -> Dict[str, Any]:
-        """Search vectors in ChromaDB collection"""
-        if not self.chroma_client:
-            return {"ids": [[]], "metadatas": [[]], "distances": [[]]}
-        
-        try:
-            collection = self.get_collection(collection_name)
-            
-            results = collection.query(
-                query_embeddings=[query_embedding],
-                where=filter_dict,
-                n_results=n_results
-            )
-            
-            return results
-            
-        except Exception as e:
-            logger.error(f"Vector search error: {e}")
-            return {"ids": [[]], "metadatas": [[]], "distances": [[]]}
+        """ChromaDB disabled - return empty results"""
+        return {"ids": [[]], "metadatas": [[]], "distances": [[]]}
     
     async def close(self):
         """Close all database connections"""
         if self.engine:
             await self.engine.dispose()
-            logger.info("MySQL connection closed")
+            logger.info("Database connection closed")
         
-        # ChromaDB doesn't need explicit closing
         logger.info("Database connections closed")

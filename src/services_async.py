@@ -38,7 +38,7 @@ class KnowledgeBaseService:
         query: str, 
         limit: int = 10
     ) -> List[Dict[str, Any]]:
-        """Search products using vector similarity"""
+        """Search products using enhanced SQL search (ChromaDB disabled for hosting compatibility)"""
         
         # Get site
         async with self.db.get_session() as session:
@@ -50,10 +50,10 @@ class KnowledgeBaseService:
                 logger.warning(f"Site not found: {site_name}")
                 return []
         
-        # Try vector search first
+        # Use enhanced SQL search (ChromaDB disabled)
         products = await self._vector_search(site.id, site_name, query, limit)
         
-        # Fallback to SQL search if no results
+        # Fallback to simple SQL search if no results
         if not products:
             products = await self._sql_search(site.id, query, limit)
         
@@ -66,32 +66,83 @@ class KnowledgeBaseService:
         query: str, 
         limit: int
     ) -> List[Dict[str, Any]]:
-        """Search using ChromaDB vectors"""
+        """Enhanced SQL search with relevance scoring (ChromaDB disabled for hosting compatibility)"""
+        
+        # Use the same enhanced SQL search logic as the working sync version
         try:
-            # Generate query embedding
-            response = await self.openai_client.embeddings.create(
-                input=query,
-                model="text-embedding-3-small"
-            )
-            query_embedding = response.data[0].embedding
-            
-            # Search in ChromaDB
-            results = await self.db.search_vectors(
-                collection_name=f"{site_name}_products",
-                query_embedding=query_embedding,
-                filter_dict={"site_id": site_id},
-                n_results=limit
-            )
-            
-            if not results["ids"][0]:
-                return []
-            
-            # Get full product details
-            product_ids = [int(m["product_id"]) for m in results["metadatas"][0]]
-            return await self._get_products_by_ids(site_id, product_ids)
-            
+            async with self.db.get_session() as session:
+                # Split query into words for better matching (like sync version)
+                query_words = query.lower().split()
+                
+                # Build comprehensive search conditions
+                search_conditions = []
+                
+                for word in query_words:
+                    word_pattern = f"%{word}%"
+                    search_conditions.extend([
+                        Product.name.ilike(word_pattern),
+                        Product.description.ilike(word_pattern),
+                        Product.short_description.ilike(word_pattern),
+                        Product.sku.ilike(word_pattern),
+                        Product.shipping_class.ilike(word_pattern)
+                    ])
+                
+                # Also search full query
+                full_query_pattern = f"%{query}%"
+                search_conditions.extend([
+                    Product.name.ilike(full_query_pattern),
+                    Product.description.ilike(full_query_pattern),
+                    Product.short_description.ilike(full_query_pattern)
+                ])
+                
+                # Combine all conditions with OR
+                from sqlalchemy import or_
+                combined_condition = or_(*search_conditions)
+                
+                # Execute search with relevance scoring (approximate)
+                stmt = select(Product).where(
+                    and_(
+                        Product.site_id == site_id,
+                        combined_condition
+                    )
+                ).limit(limit * 2)  # Get more results for ranking
+                
+                result = await session.execute(stmt)
+                products = result.scalars().all()
+                
+                # Simple relevance scoring based on where matches occur (like sync version)
+                scored_products = []
+                for product in products:
+                    score = 0
+                    text_fields = [
+                        (product.name or '', 3),  # Name matches are most important
+                        (product.short_description or '', 2),
+                        (product.description or '', 1),
+                        (product.sku or '', 2)
+                    ]
+                    
+                    for text, weight in text_fields:
+                        text_lower = text.lower()
+                        # Exact phrase match
+                        if query.lower() in text_lower:
+                            score += weight * 10
+                        # Individual word matches
+                        for word in query_words:
+                            if word in text_lower:
+                                score += weight
+                    
+                    scored_products.append((product, score))
+                
+                # Sort by score and limit results
+                scored_products.sort(key=lambda x: x[1], reverse=True)
+                final_products = [p[0] for p in scored_products[:limit]]
+                
+                # Format results
+                formatted_products = [await self._format_product(p) for p in final_products]
+                return formatted_products
+                
         except Exception as e:
-            logger.error(f"Vector search failed: {e}")
+            logger.error(f"Enhanced SQL search failed: {e}", exc_info=True)
             return []
     
     async def _sql_search(
@@ -100,24 +151,29 @@ class KnowledgeBaseService:
         query: str, 
         limit: int
     ) -> List[Dict[str, Any]]:
-        """Fallback SQL search"""
-        async with self.db.get_session() as session:
-            # Search in name and description
-            stmt = select(Product).where(
-                and_(
-                    Product.site_id == site_id,
-                    or_(
-                        Product.name.ilike(f"%{query}%"),
-                        Product.description.ilike(f"%{query}%"),
-                        Product.short_description.ilike(f"%{query}%")
+        """Simple fallback SQL search"""
+        try:
+            async with self.db.get_session() as session:
+                # Search in name and description
+                stmt = select(Product).where(
+                    and_(
+                        Product.site_id == site_id,
+                        or_(
+                            Product.name.ilike(f"%{query}%"),
+                            Product.description.ilike(f"%{query}%"),
+                            Product.short_description.ilike(f"%{query}%")
+                        )
                     )
-                )
-            ).limit(limit)
-            
-            result = await session.execute(stmt)
-            products = result.scalars().all()
-            
-            return [await self._format_product(p) for p in products]
+                ).limit(limit)
+                
+                result = await session.execute(stmt)
+                products = result.scalars().all()
+                
+                return [await self._format_product(p) for p in products]
+                
+        except Exception as e:
+            logger.error(f"SQL search failed: {e}", exc_info=True)
+            return []
     
     async def _get_products_by_ids(
         self, 
